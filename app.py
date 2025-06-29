@@ -685,71 +685,9 @@ def create_app():
     @app.route('/general_dashboard')
     @ensure_session_id
     def general_dashboard():
-        lang = session.get('lang', 'en')
-        logger.info(f"Serving general_dashboard for {'anonymous' if session.get('is_anonymous') else 'authenticated' if current_user.is_authenticated else 'no_session'} user")
-        data = {}
-        try:
-            filter_kwargs = {'user_id': current_user.id} if current_user.is_authenticated else {'session_id': session.get('sid', 'no-session-id')}
-            fh_records = get_financial_health(get_mongo_db(), filter_kwargs)
-            fh_records = [to_dict_financial_health(fh) for fh in fh_records]
-            data['financial_health'] = fh_records[0] if fh_records else {'score': None, 'status': None}
-            budget_records = get_budgets(get_mongo_db(), filter_kwargs)
-            budget_records = [to_dict_budget(b) for b in budget_records]
-            data['budget'] = budget_records[0] if budget_records else {'surplus_deficit': None, 'savings_goal': None}
-            bills = get_bills(get_mongo_db(), filter_kwargs)
-            bills = [to_dict_bill(b) for b in bills]
-            total_amount = sum(bill['amount'] for bill in bills if bill['amount'] is not None) if bills else 0
-            unpaid_amount = sum(bill['amount'] for bill in bills if bill['amount'] is not None and bill['status'].lower() != 'paid') if bills else 0
-            data['bills'] = {'bills': bills, 'total_amount': total_amount, 'unpaid_amount': unpaid_amount}
-            nw_records = get_net_worth(get_mongo_db(), filter_kwargs)
-            nw_records = [to_dict_net_worth(nw) for nw in nw_records]
-            data['net_worth'] = nw_records[0] if nw_records else {'net_worth': None, 'total_assets': None}
-            ef_records = get_emergency_funds(get_mongo_db(), filter_kwargs)
-            ef_records = [to_dict_emergency_fund(ef) for ef in ef_records]
-            data['emergency_fund'] = ef_records[0] if ef_records else {'target_amount': None, 'savings_gap': None}
-            lp_records = get_learning_progress(get_mongo_db(), filter_kwargs)
-            data['learning_progress'] = {lp['course_id']: to_dict_learning_progress(lp) for lp in lp_records} if lp_records else {}
-            quiz_records = get_quiz_results(get_mongo_db(), filter_kwargs)
-            quiz_records = [to_dict_quiz_result(qr) for qr in quiz_records]
-            data['quiz'] = quiz_records[0] if quiz_records else {'personality': None, 'score': None}
-            logger.info(f"Retrieved data for session {session.get('sid', 'no-session-id')}")
-            return render_template('personal/GENERAL/general_dashboard.html', 
-                                 data=data, 
-                                 t=trans, 
-                                 lang=lang,
-                                 title=trans('general_dashboard', lang=lang))
-        except Exception as e:
-            logger.error(f"Error in general_dashboard: {str(e)}", exc_info=True)
-            flash(trans('general_error', default='An error occurred'), 'danger')
-            default_data = {
-                'financial_health': {'score': None, 'status': None},
-                'budget': {'surplus_deficit': None, 'savings_goal': None},
-                'bills': {'bills': [], 'total_amount': 0, 'unpaid_amount': 0},
-                'net_worth': {'net_worth': None, 'total_assets': None},
-                'emergency_fund': {'target_amount': None, 'savings_gap': None},
-                'learning_progress': {},
-                'quiz': {'personality': None, 'score': None}
-            }
-            return render_template('personal/GENERAL/general_dashboard.html', 
-                                 data=default_data, 
-                                 t=trans, 
-                                 lang=lang,
-                                 title=trans('general_dashboard', lang=lang)), 500
-    
-    @app.route('/logout')
-    def logout():
-        lang = session.get('lang', 'en')
-        logger.info("Logging out user")
-        try:
-            session_lang = session.get('lang', 'en')
-            session.clear()
-            session['lang'] = session_lang
-            flash(trans('general_logout_successful', default='Successfully logged out'), 'success')
-            return redirect(url_for('index'))
-        except Exception as e:
-            logger.error(f"Error in logout: {str(e)}", exc_info=True)
-            flash(trans('general_error', default='An error occurred'), 'danger')
-            return redirect(url_for('index'))
+        """Redirect to the unified dashboard based on user role."""
+        logger.info(f"Redirecting to unified dashboard for {'authenticated' if current_user.is_authenticated else 'anonymous'} user")
+        return redirect(url_for('dashboard.index'))
     
     @app.route('/about')
     def about():
