@@ -9,7 +9,7 @@ import uuid
 from translations import trans
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from utils import mongo_client, requires_role, is_admin
+from utils import requires_role, is_admin, get_mongo_db
 from models import log_tool_usage
 from session_utils import create_anonymous_session
 
@@ -19,12 +19,6 @@ bill_bp = Blueprint(
     template_folder='templates/BILL',
     url_prefix='/BILL'
 )
-
-# Get MongoDB database
-def get_mongo_db():
-    return mongo_client.ficodb
-
-bills_collection = get_mongo_db().bills
 
 def strip_commas(value):
     """Remove commas from string values for numerical fields."""
@@ -154,6 +148,7 @@ def main():
 
     try:
         filter_kwargs = {'user_id': current_user.id} if current_user.is_authenticated else {'session_id': session['sid']}
+        bills_collection = get_mongo_db().bills
         
         if request.method == 'POST':
             action = request.form.get('action')
@@ -377,6 +372,7 @@ def unsubscribe(email):
     )
     try:
         lang = session.get('lang', 'en')
+        bills_collection = get_mongo_db().bills
         bills_collection.update_many(
             {'user_email': email},
             {'$set': {'send_email': False}}

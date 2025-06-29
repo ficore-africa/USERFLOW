@@ -148,6 +148,7 @@ def check_mongodb_connection(mongo_client, app):
 
 def setup_session(app):
     try:
+        global mongo_client
         if not check_mongodb_connection(mongo_client, app):
             logger.error("MongoDB client is not open, attempting to reinitialize")
             from pymongo import MongoClient
@@ -169,6 +170,7 @@ def setup_session(app):
                 logger.info("Session configured with filesystem fallback")
                 return
             app.config['MONGO_CLIENT'] = mongo_client_new
+            mongo_client = mongo_client_new
         app.config['SESSION_TYPE'] = 'mongodb'
         app.config['SESSION_MONGODB'] = mongo_client
         app.config['SESSION_MONGODB_DB'] = 'ficodb'
@@ -241,6 +243,27 @@ def create_app():
         logger.warning("Google OAuth2 credentials not set")
     if not app.config['SMTP_USERNAME'] or not app.config['SMTP_PASSWORD']:
         logger.warning("SMTP credentials not set")
+    
+    # Initialize MongoDB client first
+    global mongo_client
+    try:
+        from pymongo import MongoClient
+        import certifi
+        mongo_client = MongoClient(
+            app.config['MONGO_URI'],
+            connect=False,
+            tlsCAFile=certifi.where(),
+            maxPoolSize=20,
+            socketTimeoutMS=60000,
+            connectTimeoutMS=30000,
+            serverSelectionTimeoutMS=30000,
+            retryWrites=True
+        )
+        app.config['MONGO_CLIENT'] = mongo_client
+        logger.info("MongoDB client initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize MongoDB client: {str(e)}")
+        mongo_client = None
     
     # Initialize extensions
     setup_logging(app)
@@ -656,14 +679,14 @@ def create_app():
             if current_user.role == 'agent':
                 return redirect(url_for('agents_bp.dashboard'))
             elif current_user.role == 'trader':
-                return redirect(url_for('dashboard_bp.index'))
+                return redirect(url_for('dashboard.index'))
             elif current_user.role == 'admin':
                 try:
                     return redirect(url_for('admin_bp.dashboard'))
                 except:
-                    return redirect(url_for('dashboard_bp.index'))
+                    return redirect(url_for('dashboard.index'))
             elif current_user.role == 'personal':
-                return redirect(url_for('general_dashboard'))
+                return redirect(url_for('dashboard.index'))
             else:
                 return render_template('general/home.html', t=trans, lang=lang)
         try:

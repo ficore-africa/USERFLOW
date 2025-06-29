@@ -8,10 +8,10 @@ from datetime import datetime
 import uuid
 import re
 from translations import trans
-from utils import mongo_client, requires_role, is_admin
 from bson import ObjectId
 from models import log_tool_usage
 from session_utils import create_anonymous_session
+from utils import requires_role, is_admin, get_mongo_db
 
 budget_bp = Blueprint(
     'budget',
@@ -19,10 +19,6 @@ budget_bp = Blueprint(
     template_folder='templates/BUDGET',
     url_prefix='/BUDGET'
 )
-
-# Get MongoDB database
-def get_mongo_db():
-    return mongo_client.ficodb
 
 def strip_commas(value):
     """Strip commas from string values."""

@@ -107,7 +107,7 @@ def get_mongo_db():
     """
     try:
         global mongo_client
-        if hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
+        if has_request_context() and hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
             client = current_app.config['MONGO_CLIENT']
             if client:
                 return client.ficodb
@@ -128,7 +128,7 @@ def close_mongo_db():
     """
     try:
         global mongo_client
-        if hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
+        if has_request_context() and hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
             client = current_app.config['MONGO_CLIENT']
             if client:
                 client.close()
@@ -152,8 +152,8 @@ def get_limiter(app):
     """
     try:
         limiter = Limiter(
-            app,
             key_func=get_remote_address,
+            app=app,
             default_limits=["200 per day", "50 per hour"],
             storage_uri="memory://"
         )
