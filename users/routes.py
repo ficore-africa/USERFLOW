@@ -227,6 +227,7 @@ def log_audit_action(action, details=None):
         logger.error(f"Error logging audit action: {str(e)}")
 
 def get_setup_wizard_route(role):
+    """Get the appropriate setup wizard route based on user role."""
     if role == 'personal':
         return 'users_blueprint.personal_setup_wizard'
     elif role == 'trader':
@@ -237,7 +238,7 @@ def get_setup_wizard_route(role):
         return 'users_blueprint.setup_wizard'  # Fallback to trader setup
 
 def get_post_login_redirect(user_role):
-    """Determine where to redirect user after login based on their role"""
+    """Determine where to redirect user after login based on their role."""
     if user_role == 'personal':
         return url_for('index')  # Personal users go to personal finance home
     elif user_role == 'trader':
@@ -246,6 +247,19 @@ def get_post_login_redirect(user_role):
         return url_for('agents_bp.dashboard')
     elif user_role == 'admin':
         return url_for('admin_blueprint.dashboard')
+    else:
+        return url_for('index')  # Default fallback
+
+def get_explore_tools_redirect(user_role):
+    """Determine where to redirect user when they click 'Explore Your Tools' based on their role."""
+    if user_role == 'personal':
+        return url_for('index')  # Personal users go to personal finance tools
+    elif user_role == 'trader':
+        return url_for('index')  # Traders go to business tools
+    elif user_role == 'agent':
+        return url_for('agents_bp.dashboard')  # Agents go to agent dashboard
+    elif user_role == 'admin':
+        return url_for('admin_blueprint.dashboard')  # Admins go to admin dashboard
     else:
         return url_for('index')  # Default fallback
 
