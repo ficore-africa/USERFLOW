@@ -8,10 +8,9 @@ import uuid
 import json
 from mailersend_email import send_email, EMAIL_CONFIG
 from translations import trans
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from models import log_tool_usage
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 financial_health_bp = Blueprint(
     'financial_health',
@@ -19,6 +18,10 @@ financial_health_bp = Blueprint(
     template_folder='templates/HEALTHSCORE',
     url_prefix='/HEALTHSCORE'
 )
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def custom_login_required(f):
     """Custom login decorator that allows both authenticated users and anonymous sessions."""
@@ -32,7 +35,7 @@ def custom_login_required(f):
     return decorated_function
 
 def get_mongo_collection():
-    return mongo.db['financial_health_scores']
+    return get_mongo_db()['financial_health_scores']
 
 class FinancialHealthForm(FlaskForm):
     first_name = StringField(trans('general_first_name', default='First Name'))
@@ -129,11 +132,11 @@ def main():
     
     current_app.logger.info(f"Starting main for session {session['sid']} {'(anonymous)' if session.get('is_anonymous') else ''}")
     log_tool_usage(
-        mongo,
         tool_name='financial_health',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
-        action='main_view'
+        action='main_view',
+        mongo=get_mongo_db()
     )
 
     try:
@@ -144,11 +147,11 @@ def main():
             
             if action == 'calculate_score' and form.validate_on_submit():
                 log_tool_usage(
-                    mongo,
                     tool_name='financial_health',
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
-                    action='calculate_score'
+                    action='calculate_score',
+                    mongo=get_mongo_db()
                 )
 
                 debt = float(form.debt.data) if form.debt.data else 0

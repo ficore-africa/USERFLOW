@@ -8,11 +8,10 @@ from datetime import datetime
 import uuid
 import re
 from translations import trans
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from bson import ObjectId
 from models import log_tool_usage
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 budget_bp = Blueprint(
     'budget',
@@ -20,6 +19,10 @@ budget_bp = Blueprint(
     template_folder='templates/BUDGET',
     url_prefix='/BUDGET'
 )
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def strip_commas(value):
     """Strip commas from string values."""
@@ -120,7 +123,7 @@ def main():
     form = BudgetForm(data=form_data)
     
     log_tool_usage(
-        mongo,
+        get_mongo_db(),
         tool_name='budget',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
@@ -135,7 +138,7 @@ def main():
             
             if action == 'create_budget' and form.validate_on_submit():
                 log_tool_usage(
-                    mongo,
+                    get_mongo_db(),
                     tool_name='budget',
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
@@ -174,7 +177,7 @@ def main():
                 }
 
                 try:
-                    mongo.db.budgets.insert_one(budget_data)
+                    get_mongo_db().budgets.insert_one(budget_data)
                     current_app.logger.info(f"Budget saved successfully to MongoDB for session {session['sid']}")
                     flash(trans("budget_completed_success", lang), "success")
                 except Exception as e:
@@ -218,7 +221,7 @@ def main():
             elif action == 'delete':
                 budget_id = request.form.get('budget_id')
                 try:
-                    result = mongo.db.budgets.delete_one({'_id': budget_id, **filter_criteria})
+                    result = get_mongo_db().budgets.delete_one({'_id': budget_id, **filter_criteria})
                     if result.deleted_count > 0:
                         flash(trans("budget_deleted_success", lang), "success")
                         current_app.logger.info(f"Deleted budget ID {budget_id} for session {session['sid']}")
@@ -229,7 +232,7 @@ def main():
                     flash(trans("budget_delete_failed", lang), "danger")
 
         # Get budgets data for display
-        budgets = list(mongo.db.budgets.find(filter_criteria).sort('created_at', -1))
+        budgets = list(get_mongo_db().budgets.find(filter_criteria).sort('created_at', -1))
         current_app.logger.info(f"Read {len(budgets)} records from MongoDB budgets collection [session: {session['sid']}]")
 
         budgets_dict = {}

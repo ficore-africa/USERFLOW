@@ -9,10 +9,9 @@ import uuid
 from translations import trans
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from models import log_tool_usage
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 bill_bp = Blueprint(
     'bill',
@@ -21,7 +20,11 @@ bill_bp = Blueprint(
     url_prefix='/BILL'
 )
 
-bills_collection = mongo.db.bills
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
+
+bills_collection = get_mongo_db().bills
 
 def strip_commas(value):
     """Remove commas from string values for numerical fields."""
@@ -134,7 +137,7 @@ def main():
     form = BillForm(data=form_data)
     
     log_tool_usage(
-        mongo,
+        get_mongo_db(),
         tool_name='bill',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
@@ -157,7 +160,7 @@ def main():
             
             if action == 'add_bill' and form.validate_on_submit():
                 log_tool_usage(
-                    mongo,
+                    get_mongo_db(),
                     tool_name='bill',
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
@@ -366,7 +369,7 @@ def main():
 def unsubscribe(email):
     """Unsubscribe user from bill email notifications."""
     log_tool_usage(
-        mongo,
+        get_mongo_db(),
         tool_name='bill',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session.get('sid', str(uuid.uuid4())),

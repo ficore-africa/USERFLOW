@@ -9,9 +9,8 @@ from datetime import datetime
 import uuid
 import json
 from models import log_tool_usage
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 net_worth_bp = Blueprint(
     'net_worth',
@@ -19,6 +18,10 @@ net_worth_bp = Blueprint(
     template_folder='templates/NETWORTH',
     url_prefix='/NETWORTH'
 )
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def custom_login_required(f):
     """Custom login decorator that allows both authenticated users and anonymous sessions."""
@@ -124,7 +127,7 @@ def main():
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
         action='main_view',
-        mongo=mongo
+        mongo=get_mongo_db()
     )
 
     try:
@@ -139,7 +142,7 @@ def main():
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
                     action='calculate_net_worth',
-                    mongo=mongo
+                    mongo=get_mongo_db()
                 )
 
                 cash_savings = form.cash_savings.data
@@ -179,7 +182,7 @@ def main():
                     'created_at': datetime.utcnow()
                 }
                 
-                mongo.db.net_worth_data.insert_one(net_worth_record)
+                get_mongo_db().net_worth_data.insert_one(net_worth_record)
                 current_app.logger.info(f"Successfully saved record {net_worth_record['_id']} for session {session['sid']}")
                 flash(trans("net_worth_success", lang=lang), "success")
 
@@ -216,12 +219,12 @@ def main():
                         flash(trans("general_email_send_failed", lang=lang), "warning")
 
         # Get net worth data for display
-        user_records = mongo.db.net_worth_data.find(filter_criteria).sort('created_at', -1)
+        user_records = get_mongo_db().net_worth_data.find(filter_criteria).sort('created_at', -1)
         user_data = [(record['_id'], record) for record in user_records]
 
         # Fallback to email for authenticated users
         if not user_data and current_user.is_authenticated and current_user.email:
-            user_records = mongo.db.net_worth_data.find({'email': current_user.email}).sort('created_at', -1)
+            user_records = get_mongo_db().net_worth_data.find({'email': current_user.email}).sort('created_at', -1)
             user_data = [(record['_id'], record) for record in user_records]
 
         latest_record = user_data[-1][1] if user_data else {}
@@ -292,9 +295,9 @@ def unsubscribe(email):
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session['sid'],
             action='unsubscribe',
-            mongo=mongo
+            mongo=get_mongo_db()
         )
-        result = mongo.db.net_worth_data.update_many(
+        result = get_mongo_db().net_worth_data.update_many(
             {'email': email, 'user_id': current_user.id if current_user.is_authenticated else {'$exists': False}},
             {'$set': {'send_email': False}}
         )

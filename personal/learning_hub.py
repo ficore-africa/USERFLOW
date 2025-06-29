@@ -10,14 +10,13 @@ import uuid
 import json
 import os
 from translations import trans
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from werkzeug.utils import secure_filename
 from models import log_tool_usage
 import pymongo
 import logging
 from flask import g
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 learning_hub_bp = Blueprint(
     'learning_hub',
@@ -25,6 +24,10 @@ learning_hub_bp = Blueprint(
     template_folder='templates/personal/LEARNINGHUB',
     url_prefix='/LEARNINGHUB'
 )
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def custom_login_required(f):
     """Custom login decorator that allows both authenticated users and anonymous sessions."""
@@ -284,7 +287,7 @@ def get_progress():
             session.permanent = True
             session.modified = True
         filter_kwargs = {'user_id': current_user.id} if current_user.is_authenticated else {'session_id': session.get('sid', str(uuid.uuid4()))}
-        progress_records = mongo.db.learning_materials.find(filter_kwargs)
+        progress_records = get_mongo_db().learning_materials.find(filter_kwargs)
         progress = {}
         for record in progress_records:
             try:
@@ -326,7 +329,7 @@ def save_course_progress(course_id, course_progress):
                 'current_lesson': course_progress.get('current_lesson')
             }
         }
-        mongo.db.learning_materials.update_one(filter_kwargs, update_data, upsert=True)
+        get_mongo_db().learning_materials.update_one(filter_kwargs, update_data, upsert=True)
         current_app.logger.info(f"Saved progress for course {course_id}", extra={'session_id': session.get('sid')})
     except Exception as e:
         current_app.logger.error(f"Error saving progress to MongoDB for course {course_id}: {str(e)}", extra={'session_id': session.get('sid', 'no-session-id')})
@@ -336,7 +339,7 @@ def init_storage(app):
     with app.app_context():
         current_app.logger.info("Initializing courses storage.", extra={'session_id': 'no-request-context'})
         try:
-            existing_courses = mongo.db.learning_materials.find({'type': 'course'})
+            existing_courses = get_mongo_db().learning_materials.find({'type': 'course'})
             if not existing_courses.count():
                 current_app.logger.info("Courses collection is empty. Initializing with default courses.", extra={'session_id': 'no-request-context'})
                 default_courses = [
@@ -352,7 +355,7 @@ def init_storage(app):
                     } for course in courses_data.values()
                 ]
                 if default_courses:
-                    mongo.db.learning_materials.insert_many(default_courses)
+                    get_mongo_db().learning_materials.insert_many(default_courses)
                     current_app.logger.info(f"Initialized courses collection with {len(default_courses)} default courses", extra={'session_id': 'no-request-context'})
         except Exception as e:
             current_app.logger.error(f"Error initializing courses: {str(e)}", extra={'session_id': 'no-request-context'})
@@ -434,11 +437,11 @@ def main():
     
     try:
         log_tool_usage(
-            mongo=mongo.db,
             tool_name='learning_hub',
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session['sid'],
-            action='main_view'
+            action='main_view',
+            mongo=get_mongo_db()
         )
         
         # Get progress and calculate summary
@@ -696,11 +699,11 @@ def profile():
     
     try:
         log_tool_usage(
-            mongo=mongo.db,
             tool_name='learning_hub',
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session['sid'],
-            action='profile_submit' if request.method == 'POST' else 'profile_view'
+            action='profile_submit' if request.method == 'POST' else 'profile_view',
+            mongo=get_mongo_db()
         )
         
         if request.method == 'POST':
@@ -735,11 +738,11 @@ def unsubscribe(email):
     
     try:
         log_tool_usage(
-            mongo=mongo.db,
             tool_name='learning_hub',
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session['sid'],
-            action='unsubscribe'
+            action='unsubscribe',
+            mongo=get_mongo_db()
         )
         
         lang = session.get('lang', 'en')
@@ -773,11 +776,11 @@ def serve_uploaded_file(filename):
     
     try:
         log_tool_usage(
-            mongo=mongo.db,
             tool_name='learning_hub',
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session['sid'],
-            action='serve_file'
+            action='serve_file',
+            mongo=get_mongo_db()
         )
         
         response = send_from_directory(current_app.config.get('UPLOAD_FOLDER', UPLOAD_FOLDER), filename)

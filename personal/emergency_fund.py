@@ -8,12 +8,11 @@ from datetime import datetime
 import uuid
 import json
 from translations import trans
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from bson import ObjectId
 from models import log_tool_usage
 import os
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 emergency_fund_bp = Blueprint(
     'emergency_fund',
@@ -21,6 +20,10 @@ emergency_fund_bp = Blueprint(
     template_folder='templates/EMERGENCYFUND',
     url_prefix='/EMERGENCYFUND'
 )
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def custom_login_required(f):
     """Custom login decorator that allows both authenticated users and anonymous sessions."""
@@ -106,11 +109,11 @@ def main():
     form = EmergencyFundForm(data=form_data)
     
     log_tool_usage(
-        mongo=mongo.db,
         tool_name='emergency_fund',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
-        action='main_view'
+        action='main_view',
+        mongo=get_mongo_db()
     )
 
     try:
@@ -121,11 +124,11 @@ def main():
             
             if action == 'create_plan' and form.validate_on_submit():
                 log_tool_usage(
-                    mongo=mongo.db,
                     tool_name='emergency_fund',
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
-                    action='create_plan'
+                    action='create_plan',
+                    mongo=get_mongo_db()
                 )
 
                 months = int(form.timeline.data)
@@ -181,7 +184,7 @@ def main():
                     'created_at': datetime.utcnow()
                 }
                 
-                mongo.db.emergency_funds.insert_one(emergency_fund)
+                get_mongo_db().emergency_funds.insert_one(emergency_fund)
                 current_app.logger.info(f"Emergency fund record saved to MongoDB with ID {emergency_fund['_id']}")
                 flash(trans('emergency_fund_completed_successfully', default='Emergency fund calculation completed successfully!'), 'success')
 
@@ -223,12 +226,12 @@ def main():
                         flash(trans("general_email_send_failed", lang=lang), "danger")
 
         # Get emergency fund data for display
-        user_data = mongo.db.emergency_funds.find(filter_kwargs).sort('created_at', -1)
+        user_data = get_mongo_db().emergency_funds.find(filter_kwargs).sort('created_at', -1)
         user_data = list(user_data)
         current_app.logger.info(f"Retrieved {len(user_data)} records from MongoDB for user {current_user.id if current_user.is_authenticated else 'anonymous'}")
 
         if not user_data and current_user.is_authenticated and current_user.email:
-            user_data = mongo.db.emergency_funds.find({'email': current_user.email}).sort('created_at', -1)
+            user_data = get_mongo_db().emergency_funds.find({'email': current_user.email}).sort('created_at', -1)
             user_data = list(user_data)
             current_app.logger.info(f"Retrieved {len(user_data)} records for email {current_user.email}")
 
@@ -251,7 +254,7 @@ def main():
 
         cross_tool_insights = []
         filter_kwargs_budget = {'user_id': current_user.id} if current_user.is_authenticated else {'session_id': session['sid']}
-        budget_data = mongo.db.budgets.find(filter_kwargs_budget).sort('created_at', -1)
+        budget_data = get_mongo_db().budgets.find(filter_kwargs_budget).sort('created_at', -1)
         budget_data = list(budget_data)
         if budget_data and latest_record and latest_record.get('savings_gap', 0) > 0:
             latest_budget = budget_data[0]
@@ -307,16 +310,16 @@ def unsubscribe(email):
     try:
         lang = session.get('lang', 'en')
         log_tool_usage(
-            mongo=mongo.db,
             tool_name='emergency_fund',
             user_id=current_user.id if current_user.is_authenticated else None,
             session_id=session.get('sid', str(uuid.uuid4())),
-            action='unsubscribe'
+            action='unsubscribe',
+            mongo=get_mongo_db()
         )
         filter_kwargs = {'email': email}
         if current_user.is_authenticated:
             filter_kwargs['user_id'] = current_user.id
-        mongo.db.emergency_funds.update_many(
+        get_mongo_db().emergency_funds.update_many(
             filter_kwargs,
             {'$set': {'email_opt_in': False}}
         )

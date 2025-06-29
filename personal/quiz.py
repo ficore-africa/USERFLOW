@@ -9,16 +9,19 @@ import json
 import logging
 from translations import trans
 from mailersend_email import send_email, EMAIL_CONFIG
-from extensions import mongo
+from utils import mongo_client, requires_role, is_admin
 from models import log_tool_usage
 from session_utils import create_anonymous_session
-from utils import requires_role, is_admin
 
 # Configure logging
 logger = logging.getLogger('ficore_app')
 
 # Define the quiz blueprint
 quiz_bp = Blueprint('quiz', __name__, template_folder='templates/QUIZ', url_prefix='/QUIZ')
+
+# Get MongoDB database
+def get_mongo_db():
+    return mongo_client.ficodb
 
 def custom_login_required(f):
     """Custom login decorator that allows both authenticated users and anonymous sessions."""
@@ -187,11 +190,11 @@ def main():
     form = QuizForm(lang=lang, data=form_data)
     
     log_tool_usage(
-        mongo,
         tool_name='quiz',
         user_id=current_user.id if current_user.is_authenticated else None,
         session_id=session['sid'],
-        action='main_view'
+        action='main_view',
+        mongo=get_mongo_db()
     )
 
     try:
@@ -202,11 +205,11 @@ def main():
             
             if action == 'submit_quiz' and form.validate_on_submit():
                 log_tool_usage(
-                    mongo,
                     tool_name='quiz',
                     user_id=current_user.id if current_user.is_authenticated else None,
                     session_id=session['sid'],
-                    action='submit_quiz'
+                    action='submit_quiz',
+                    mongo=get_mongo_db()
                 )
 
                 # Calculate results
@@ -233,7 +236,7 @@ def main():
                 }
                 
                 logger.debug(f"Saving quiz result with created_at: {created_at}, type: {type(created_at)}", extra={'session_id': session['sid']})
-                mongo.db.quiz_responses.insert_one(quiz_result)
+                get_mongo_db().quiz_responses.insert_one(quiz_result)
                 logger.info(f"Successfully saved quiz result {quiz_result['_id']} for session {session['sid']}", extra={'session_id': session['sid']})
                 flash(trans('quiz_completed_successfully', default='Quiz completed successfully!'), 'success')
                 
@@ -267,10 +270,10 @@ def main():
                         flash(trans("general_email_send_failed", default="Failed to send email.", lang=lang), "warning")
 
         # Get quiz results for display
-        quiz_results = list(mongo.db.quiz_responses.find(filter_criteria).sort('created_at', -1))
+        quiz_results = list(get_mongo_db().quiz_responses.find(filter_criteria).sort('created_at', -1))
         
         if not quiz_results and current_user.is_authenticated and current_user.email:
-            quiz_results = list(mongo.db.quiz_responses.find({'email': current_user.email}).sort('created_at', -1))
+            quiz_results = list(get_mongo_db().quiz_responses.find({'email': current_user.email}).sort('created_at', -1))
 
         latest_record = quiz_results[0] if quiz_results else {}
         
