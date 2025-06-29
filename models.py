@@ -421,7 +421,7 @@ def get_user(db, user_id):
 
 def get_financial_health(db, filter_kwargs):
     try:
-        return list(db.financial_health.find(filter_kwargs).sort('created_at', DESCENDING))
+        return list(db.financial_health_scores.find(filter_kwargs).sort('created_at', DESCENDING))
     except Exception as e:
         logger.error(f"{trans('general_financial_health_fetch_error', default='Error getting financial health')}: {str(e)}")
         raise
@@ -442,7 +442,7 @@ def get_bills(db, filter_kwargs):
 
 def get_net_worth(db, filter_kwargs):
     try:
-        return list(db.net_worth.find(filter_kwargs).sort('created_at', DESCENDING))
+        return list(db.net_worth_data.find(filter_kwargs).sort('created_at', DESCENDING))
     except Exception as e:
         logger.error(f"{trans('general_net_worth_fetch_error', default='Error getting net worth')}: {str(e)}")
         raise
@@ -456,14 +456,14 @@ def get_emergency_funds(db, filter_kwargs):
 
 def get_learning_progress(db, filter_kwargs):
     try:
-        return list(db.learning_progress.find(filter_kwargs))
+        return list(db.learning_materials.find(filter_kwargs))
     except Exception as e:
         logger.error(f"{trans('general_learning_progress_fetch_error', default='Error getting learning progress')}: {str(e)}")
         raise
 
 def get_quiz_results(db, filter_kwargs):
     try:
-        return list(db.quiz_results.find(filter_kwargs).sort('created_at', DESCENDING))
+        return list(db.quiz_responses.find(filter_kwargs).sort('created_at', DESCENDING))
     except Exception as e:
         logger.error(f"{trans('general_quiz_results_fetch_error', default='Error getting quiz results')}: {str(e)}")
         raise
@@ -570,3 +570,115 @@ def create_tax_reminder(db, reminder_data):
     except Exception as e:
         logger.error(f"{trans('general_tax_reminder_creation_error', default='Error creating tax reminder')}: {str(e)}")
         raise
+
+# Data conversion functions for backward compatibility
+def to_dict_financial_health(record):
+    """Convert financial health record to dictionary."""
+    if not record:
+        return {'score': None, 'status': None}
+    return {
+        'score': record.get('score'),
+        'status': record.get('status'),
+        'debt_to_income': record.get('debt_to_income'),
+        'savings_rate': record.get('savings_rate'),
+        'interest_burden': record.get('interest_burden'),
+        'badges': record.get('badges', []),
+        'created_at': record.get('created_at')
+    }
+
+def to_dict_budget(record):
+    """Convert budget record to dictionary."""
+    if not record:
+        return {'surplus_deficit': None, 'savings_goal': None}
+    return {
+        'income': record.get('income', 0),
+        'fixed_expenses': record.get('fixed_expenses', 0),
+        'variable_expenses': record.get('variable_expenses', 0),
+        'savings_goal': record.get('savings_goal', 0),
+        'surplus_deficit': record.get('surplus_deficit', 0),
+        'housing': record.get('housing', 0),
+        'food': record.get('food', 0),
+        'transport': record.get('transport', 0),
+        'dependents': record.get('dependents', 0),
+        'miscellaneous': record.get('miscellaneous', 0),
+        'others': record.get('others', 0),
+        'created_at': record.get('created_at')
+    }
+
+def to_dict_bill(record):
+    """Convert bill record to dictionary."""
+    if not record:
+        return {'amount': None, 'status': None}
+    return {
+        'id': str(record.get('_id', '')),
+        'bill_name': record.get('bill_name', ''),
+        'amount': record.get('amount', 0),
+        'due_date': record.get('due_date', ''),
+        'frequency': record.get('frequency', ''),
+        'category': record.get('category', ''),
+        'status': record.get('status', ''),
+        'send_email': record.get('send_email', False),
+        'reminder_days': record.get('reminder_days'),
+        'user_email': record.get('user_email', ''),
+        'first_name': record.get('first_name', '')
+    }
+
+def to_dict_net_worth(record):
+    """Convert net worth record to dictionary."""
+    if not record:
+        return {'net_worth': None, 'total_assets': None}
+    return {
+        'cash_savings': record.get('cash_savings', 0),
+        'investments': record.get('investments', 0),
+        'property': record.get('property', 0),
+        'loans': record.get('loans', 0),
+        'total_assets': record.get('total_assets', 0),
+        'total_liabilities': record.get('total_liabilities', 0),
+        'net_worth': record.get('net_worth', 0),
+        'badges': record.get('badges', []),
+        'created_at': record.get('created_at')
+    }
+
+def to_dict_emergency_fund(record):
+    """Convert emergency fund record to dictionary."""
+    if not record:
+        return {'target_amount': None, 'savings_gap': None}
+    return {
+        'monthly_expenses': record.get('monthly_expenses', 0),
+        'monthly_income': record.get('monthly_income', 0),
+        'current_savings': record.get('current_savings', 0),
+        'risk_tolerance_level': record.get('risk_tolerance_level', ''),
+        'dependents': record.get('dependents', 0),
+        'timeline': record.get('timeline', 0),
+        'recommended_months': record.get('recommended_months', 0),
+        'target_amount': record.get('target_amount', 0),
+        'savings_gap': record.get('savings_gap', 0),
+        'monthly_savings': record.get('monthly_savings', 0),
+        'percent_of_income': record.get('percent_of_income'),
+        'badges': record.get('badges', []),
+        'created_at': record.get('created_at')
+    }
+
+def to_dict_learning_progress(record):
+    """Convert learning progress record to dictionary."""
+    if not record:
+        return {'lessons_completed': [], 'quiz_scores': {}}
+    return {
+        'course_id': record.get('course_id', ''),
+        'lessons_completed': record.get('lessons_completed', []),
+        'quiz_scores': record.get('quiz_scores', {}),
+        'current_lesson': record.get('current_lesson')
+    }
+
+def to_dict_quiz_result(record):
+    """Convert quiz result record to dictionary."""
+    if not record:
+        return {'personality': None, 'score': None}
+    return {
+        'personality': record.get('personality', ''),
+        'score': record.get('score', 0),
+        'badges': record.get('badges', []),
+        'insights': record.get('insights', []),
+        'tips': record.get('tips', []),
+        'created_at': record.get('created_at')
+    }
