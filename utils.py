@@ -9,6 +9,21 @@ from flask_limiter.util import get_remote_address
 from pymongo import MongoClient
 from translations import trans
 
+# Flask extensions - defined here to avoid having too many files
+from flask_login import LoginManager
+from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
+from flask_babel import Babel
+from flask_compress import Compress
+
+# Initialize extensions
+mongo_client = None
+login_manager = LoginManager()
+flask_session = Session()
+csrf = CSRFProtect()
+babel = Babel()
+compress = Compress()
+
 # Set up logging with session support
 root_logger = logging.getLogger('ficore_app')
 
@@ -91,13 +106,13 @@ def get_mongo_db():
         Database object or None if connection fails
     """
     try:
+        global mongo_client
         if hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
             client = current_app.config['MONGO_CLIENT']
             if client:
                 return client.ficodb
         
-        # Fallback: create new connection
-        from extensions import mongo_client
+        # Fallback: use global mongo_client
         if mongo_client:
             return mongo_client.ficodb
         
@@ -112,11 +127,16 @@ def close_mongo_db():
     Close MongoDB connection.
     """
     try:
+        global mongo_client
         if hasattr(current_app, 'config') and 'MONGO_CLIENT' in current_app.config:
             client = current_app.config['MONGO_CLIENT']
             if client:
                 client.close()
                 logger.info(trans('general_mongo_connection_closed', default='MongoDB connection closed'))
+        elif mongo_client:
+            mongo_client.close()
+            mongo_client = None
+            logger.info(trans('general_mongo_connection_closed', default='MongoDB connection closed'))
     except Exception as e:
         logger.error(f"{trans('general_mongo_close_error', default='Error closing MongoDB connection')}: {str(e)}", exc_info=True)
 
@@ -617,6 +637,7 @@ def to_dict_tax_reminder(record):
 
 # Export all functions for backward compatibility
 __all__ = [
+    'mongo_client', 'login_manager', 'flask_session', 'csrf', 'babel', 'compress',
     'create_anonymous_session',
     'trans_function',
     'is_valid_email',
