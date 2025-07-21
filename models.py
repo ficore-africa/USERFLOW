@@ -579,6 +579,46 @@ def initialize_app_data(db):
                 {'key': [('created_at', DESCENDING)]},
                 {'key': [('shared_with', ASCENDING)]}
             ]
+        },
+        'food_orders': {
+            'validator': {
+                '$jsonSchema': {
+                    'bsonType': 'object',
+                    'required': ['_id', 'user_id', 'name', 'vendor', 'total_cost', 'created_at', 'updated_at', 'shared_with', 'items'],
+                    'properties': {
+                        '_id': {'bsonType': 'objectId'},
+                        'user_id': {'bsonType': 'string'},
+                        'name': {'bsonType': 'string'},
+                        'vendor': {'bsonType': 'string'},
+                        'total_cost': {'bsonType': 'double', 'minimum': 0},
+                        'created_at': {'bsonType': 'date'},
+                        'updated_at': {'bsonType': 'date'},
+                        'shared_with': {
+                            'bsonType': 'array',
+                            'items': {'bsonType': 'string'}
+                        },
+                        'items': {
+                            'bsonType': 'array',
+                            'items': {
+                                'bsonType': 'object',
+                                'required': ['item_id', 'name', 'quantity', 'price'],
+                                'properties': {
+                                    'item_id': {'bsonType': 'string'},
+                                    'name': {'bsonType': 'string'},
+                                    'quantity': {'bsonType': 'int', 'minimum': 1},
+                                    'price': {'bsonType': 'double', 'minimum': 0},
+                                    'category': {'bsonType': ['string', 'null']}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            'indexes': [
+                {'key': [('user_id', ASCENDING)]},
+                {'key': [('created_at', DESCENDING)]},
+                {'key': [('shared_with', ASCENDING)]}
+            ]
         }
     }
     
@@ -716,6 +756,126 @@ def delete_record(db, record_id):
     except Exception as e:
         logger.error(f"{trans('general_record_delete_error', default='Error deleting record')}: {str(e)}", exc_info=True)
         raise
+
+# CRUD Functions for Food Orders
+def create_food_order(db, order_data):
+    """
+    Create a new food order in the food_orders collection.
+    
+    Args:
+        db: MongoDB database instance
+        order_data: Dictionary containing food order information
+    
+    Returns:
+        str: ID of the created food order
+    """
+    try:
+        required_fields = ['user_id', 'name', 'vendor', 'total_cost', 'created_at', 'updated_at', 'shared_with', 'items']
+        if not all(field in order_data for field in required_fields):
+            raise ValueError(trans('general_missing_food_order_fields', default='Missing required food order fields'))
+        
+        # Ensure items have item_id
+        for item in order_data.get('items', []):
+            if 'item_id' not in item:
+                item['item_id'] = str(uuid.uuid4())
+        
+        result = db.food_orders.insert_one(order_data)
+        logger.info(f"{trans('general_food_order_created', default='Created food order with ID')}: {result.inserted_id}", 
+                   extra={'session_id': order_data.get('session_id', 'no-session-id')})
+        return str(result.inserted_id)
+    except Exception as e:
+        logger.error(f"{trans('general_food_order_creation_error', default='Error creating food order')}: {str(e)}", 
+                    exc_info=True, extra={'session_id': order_data.get('session_id', 'no-session-id')})
+        raise
+
+def get_food_orders(db, filter_kwargs):
+    """
+    Retrieve food order records based on filter criteria.
+    
+    Args:
+        db: MongoDB database instance
+        filter_kwargs: Dictionary of filter criteria
+    
+    Returns:
+        list: List of food order records
+    """
+    try:
+        return list(db.food_orders.find(filter_kwargs).sort('created_at', DESCENDING))
+    except Exception as e:
+        logger.error(f"{trans('general_food_orders_fetch_error', default='Error getting food orders')}: {str(e)}", 
+                    exc_info=True, extra={'session_id': 'no-session-id'})
+        raise
+
+def update_food_order(db, order_id, update_data):
+    """
+    Update a food order in the food_orders collection.
+    
+    Args:
+        db: MongoDB database instance
+        order_id: The ID of the food order to update
+        update_data: Dictionary containing fields to update
+    
+    Returns:
+        bool: True if updated, False if not found or no changes made
+    """
+    try:
+        update_data['updated_at'] = datetime.utcnow()
+        result = db.food_orders.update_one(
+            {'_id': ObjectId(order_id)},
+            {'$set': update_data}
+        )
+        if result.modified_count > 0:
+            logger.info(f"{trans('general_food_order_updated', default='Updated food order with ID')}: {order_id}", 
+                       extra={'session_id': 'no-session-id'})
+            return True
+        logger.info(f"{trans('general_food_order_no_change', default='No changes made to food order with ID')}: {order_id}", 
+                   extra={'session_id': 'no-session-id'})
+        return False
+    except Exception as e:
+        logger.error(f"{trans('general_food_order_update_error', default='Error updating food order with ID')} {order_id}: {str(e)}", 
+                    exc_info=True, extra={'session_id': 'no-session-id'})
+        raise
+
+def delete_food_order(db, order_id):
+    """
+    Delete a food order from the food_orders collection.
+    
+    Args:
+        db: MongoDB database instance
+        order_id: The ID of the food order to delete
+    
+    Returns:
+        bool: True if deleted, False if not found
+    """
+    try:
+        result = db.food_orders.delete_one({'_id': ObjectId(order_id)})
+        if result.deleted_count > 0:
+            logger.info(f"{trans('general_food_order_deleted', default='Deleted food order with ID')}: {order_id}", 
+                       extra={'session_id': 'no-session-id'})
+            return True
+        logger.info(f"{trans('general_food_order_not_found', default='Food order not found with ID')}: {order_id}", 
+                   extra={'session_id': 'no-session-id'})
+        return False
+    except Exception as e:
+        logger.error(f"{trans('general_food_order_delete_error', default='Error deleting food order with ID')} {order_id}: {str(e)}", 
+                    exc_info=True, extra={'session_id': 'no-session-id'})
+        raise
+
+def to_dict_food_order(record):
+    """Convert food order record to dictionary."""
+    if not record:
+        return {'name': None, 'vendor': None, 'total_cost': None}
+    return {
+        'id': str(record.get('_id', '')),
+        'user_id': record.get('user_id', ''),
+        'name': record.get('name', ''),
+        'vendor': record.get('vendor', ''),
+        'total_cost': record.get('total_cost', 0.0),
+        'created_at': record.get('created_at'),
+        'updated_at': record.get('updated_at'),
+        'shared_with': record.get('shared_with', []),
+        'items': record.get('items', [])
+    }
 
 # CRUD Functions for Food Orders
 def create_food_order(db, order_data):
