@@ -229,13 +229,17 @@ def setup_session(app):
                     app.config['SESSION_MONGODB_DB'] = 'ficodb'
                     app.config['SESSION_MONGODB_COLLECT'] = 'sessions'
                     app.config['SESSION_PERMANENT'] = False
-                    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)
+                    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=5)
                     app.config['SESSION_USE_SIGNER'] = True
                     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
                     app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV', 'development') == 'production'
                     app.config['SESSION_COOKIE_HTTPONLY'] = True
                     app.config['SESSION_COOKIE_NAME'] = 'ficore_session'
                     utils.flask_session.init_app(app)
+
+                    # Add TTL index for sessions collection
+                    db = app.extensions['mongo']['ficodb']
+                    db.sessions.create_index("created_at", expireAfterSeconds=300)  # 5 minute
                     logger.info(f'Session configured: type={app.config["SESSION_TYPE"]}, db={app.config["SESSION_MONGODB_DB"]}, collection={app.config["SESSION_MONGODB_COLLECT"]}')
                     return
                 logger.warning(f'MongoDB connection attempt {attempt + 1} failed, retrying...')
@@ -1082,7 +1086,7 @@ def create_app():
 
         if current_user.is_authenticated and 'last_activity' in session:
             last_activity = session.get('last_activity')
-            timeout_minutes = 30  # Adjust as needed
+            timeout_minutes = 5  # Adjust as needed
 
             # Convert last_activity to datetime if it's a string
             if isinstance(last_activity, str):
