@@ -126,6 +126,11 @@ class ShoppingListForm(FlaskForm):
         self.budget.label.text = trans('shopping_budget', lang) or 'Budget'
         self.submit.label.text = trans('shopping_submit', lang) or 'Create List'
 
+    def validate_budget(self, budget):
+        if budget.data is not None:
+            # Ensure budget is formatted to 2 decimal places to match client-side
+            budget.data = round(float(budget.data), 2)
+
 class ShoppingItemForm(FlaskForm):
     name = StringField(
         trans('shopping_item_name', default='Item Name'),
@@ -259,38 +264,90 @@ def main():
 
     if request.method == 'POST':
         action = request.form.get('action')
-        if action == 'create_list' and list_form.validate_on_submit():
-            if current_user.is_authenticated and not is_admin():
-                if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
-                    flash(trans('shopping_insufficient_credits', default='Insufficient credits to create a list.'), 'danger')
-                    return redirect(url_for('dashboard.index'))
-            list_data = {
-                '_id': ObjectId(),
-                'name': list_form.name.data,
-                'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                'session_id': session['sid'],
-                'budget': list_form.budget.data,
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow(),
-                'collaborators': [],
-                'items': [],
-                'total_spent': 0.0,
-                'status': 'active'
-            }
-            try:
-                with db.client.start_session() as mongo_session:
-                    with mongo_session.start_transaction():
-                        db.shopping_lists.insert_one(list_data, session=mongo_session)
-                        if current_user.is_authenticated and not is_admin():
-                            if not deduct_ficore_credits(db, current_user.id, 0.1, 'create_shopping_list', list_data['_id'], mongo_session):
-                                db.shopping_lists.delete_one({'_id': list_data['_id']}, session=mongo_session)
-                                flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits.'), 'danger')
-                                return redirect(url_for('personal.shopping.main', tab='create-list'))
-                flash(trans('shopping_list_created', default='List created successfully!'), 'success')
-                return redirect(url_for('personal.shopping.main', tab='view-lists'))
-            except Exception as e:
-                logger.error(f"Failed to save list {list_data['_id']}: {str(e)}")
-                flash(trans('shopping_list_error', default='Error saving list.'), 'danger')
+        if action == 'create_list':
+            if list_form.validate_on_submit():
+                if current_user.is_authenticated and not is_admin():
+                    if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
+                        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                            return jsonify({
+                                'success': False,
+                                'error': trans('shopping_insufficient_credits', default='Insufficient credits to create a list.')
+                            }), 403
+                        flash(trans('shopping_insufficient_credits', default='Insufficient credits to create a list.'), 'danger')
+                        return redirect(url_for('dashboard.index'))
+                list_data = {
+                    '_id': ObjectId(),
+                    'name': list_form.name.data,
+                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
+                    'session_id': session['sid'],
+                    'budget': list_form.budget.data,
+                    'created_at': datetime.utcnow(),
+                    'updated_at': datetime.utcnow(),
+                    'collaborators': [],
+                    'items': [],
+                    'total_spent': 0.0,
+                    'status': 'active'
+                }
+                try:
+                    with db.client.start_session() as mongo_session:
+                        with mongo_session.start_transaction():
+                            db.shopping_lists.insert_one(list_data, session=mongo_session)
+                            if current_user.is_authenticated and not is_admin():
+                                if not deduct_ficore_credits(db, current_user.id, 0.1, 'create_shopping_list', list_data['_id'], mongo_session):
+                                    db.shopping_lists.delete_one({'_id': list_data['_id']}, session=mongo_session)
+                                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                                        return jsonify({
+                                            'success': False,
+                                            'error': trans('shopping_credit_deduction_failed', default='Failed to deduct credits.')
+                                        }), 500
+                                    flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits.'), 'danger')
+                                    return redirect(url_for('personal.shopping.main', tab='create-list'))
+                    session['selected_list_id'] = str(list_data['_id'])  # Set for pre-selection
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({
+                            'success': True,
+                            'redirect_url': url_for('personal.shopping.main', tab='add-items', list_id=str(list_data['_id']))
+                        })
+                    flash(trans('shopping_list_created', default='List created successfully!'), 'success')
+                    return redirect(url_for('personal.shopping.main', tab='add-items', list_id=str(list_data['_id'])))
+                except Exception as e:
+                    logger.error(f"Failed to save list {list_data['_id']}: {str(e)}")
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return jsonify({
+                            'success': False,
+                            'error': trans('shopping_list_error', default='Error saving list.')
+                        }), 500
+                    flash(trans('shopping_list_error', default='Error saving list.'), 'danger')
+                    return redirect(url_for('personal.shopping.main', tab='create-list'))
+            else:
+                # Form validation failed
+                errors = {}
+                for field, field_errors in list_form.errors.items():
+                    errors[field] = [trans(error, default=error) for error in field_errors]
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({
+                        'success': False,
+                        'error': trans('shopping_form_invalid', default='Invalid form data.'),
+                        'errors': errors
+                    }), 400
+                flash(trans('shopping_form_invalid', default='Invalid form data.'), 'danger')
+                return render_template(
+                    'personal/SHOPPING/create_list.html',
+                    list_form=list_form,
+                    item_form=item_form,
+                    share_form=share_form,
+                    lists={},
+                    selected_list=None,
+                    selected_list_id=None,
+                    items=[],
+                    categories={},
+                    tips=[],
+                    insights=[],
+                    tool_title=trans('shopping_title', default='Shopping List Planner'),
+                    active_tab='create-list',
+                    format_currency=format_currency,
+                    format_datetime=format_date
+                )
 
         elif action == 'add_items':
             list_id = request.form.get('list_id')
@@ -400,6 +457,9 @@ def main():
                             if not deduct_ficore_credits(db, current_user.id, 0.5, 'delete_shopping_list', list_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for deletion.'), 'danger')
                                 return redirect(url_for('personal.shopping.main', tab='view-lists'))
+                # Clear selected_list_id if deleted
+                if session.get('selected_list_id') == list_id:
+                    session.pop('selected_list_id', None)
                 flash(trans('shopping_list_deleted', default='List deleted successfully!'), 'success')
             except Exception as e:
                 logger.error(f"Error deleting list {list_id}: {str(e)}")
@@ -435,7 +495,8 @@ def main():
         }
         lists_dict[list_data['id']] = list_data
 
-    selected_list_id = request.args.get('list_id')
+    # Use session['selected_list_id'] if no list_id in query args
+    selected_list_id = request.args.get('list_id') or session.get('selected_list_id')
     if selected_list_id and ObjectId.is_valid(selected_list_id):
         selected_list = lists_dict.get(selected_list_id)
         if selected_list:
@@ -532,7 +593,7 @@ def get_list_details():
     try:
         html = render_template(
             'personal/SHOPPING/manage_list_details.html',
-            list_form=ShoppingListForm(data={'list_name': selected_list['name'], 'list_budget': selected_list['budget']}),
+            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget']}),
             item_form=ShoppingItemForm(),
             selected_list=selected_list,
             selected_list_id=list_id,
@@ -751,7 +812,7 @@ def manage_list(list_id):
 
         return render_template(
             'personal/SHOPPING/manage_list.html',
-            list_form=ShoppingListForm(data={'list_name': selected_list['name'], 'list_budget': selected_list['budget']}),
+            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget']}),
             item_form=ShoppingItemForm(),
             share_form=ShareListForm(),
             lists=lists_dict,
