@@ -189,6 +189,16 @@ function toggleAmountVisibility() {
     const visibilityIcon = document.getElementById('visibilityIcon');
     visibilityIcon.classList.toggle('bi-eye', amountsVisible);
     visibilityIcon.classList.toggle('bi-eye-slash', !amountsVisible);
+    
+    // Add custom styling when toggled
+    if (amountsVisible) {
+        visibilityIcon.style.color = '#28a745'; // Green when visible
+        visibilityIcon.style.transform = 'scale(1.1)';
+    } else {
+        visibilityIcon.style.color = '#dc3545'; // Red when hidden
+        visibilityIcon.style.transform = 'scale(1)';
+    }
+    
     document.querySelectorAll('.personal-amount-value').forEach(el => {
         el.textContent = amountsVisible ? formatCurrency(el.dataset.amount) : '****';
     });
@@ -259,7 +269,6 @@ function loadFinancialSummary() {
         .catch(error => {
             console.error('Error loading shopping summary:', error);
         });
-
 
     // Ficore Balance is now the main balance, ensure it's loaded first or independently
     fetch(window.apiUrls.ficoreBalance)
@@ -386,10 +395,6 @@ function loadRecentActivity() {
             // Removed showToast as it's assumed to be handled by base.html
         });
 }
-
-// loadNotifications function removed, as it's assumed to be handled by base.html
-
-// showToast function removed, as it's assumed to be handled by base.html
 
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof bootstrap === 'undefined') {
