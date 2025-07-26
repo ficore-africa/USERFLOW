@@ -490,6 +490,62 @@ def main():
         format_datetime=format_date
     )
 
+@shopping_bp.route('/get_list_details', methods=['GET'])
+@custom_login_required
+@requires_role(['personal', 'admin'])
+def get_list_details():
+    db = get_mongo_db()
+    list_id = request.args.get('list_id')
+    tab = request.args.get('tab', 'manage-list')
+    
+    if not ObjectId.is_valid(list_id):
+        return jsonify({'success': False, 'error': trans('shopping_invalid_list_id', default='Invalid list ID.')}), 400
+    
+    filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
+    shopping_list = db.shopping_lists.find_one({'_id': ObjectId(list_id), **filter_criteria})
+    
+    if not shopping_list:
+        return jsonify({'success': False, 'error': trans('shopping_list_not_found', default='List not found.')}), 404
+    
+    list_items = list(db.shopping_items.find({'list_id': str(list_id)}))
+    selected_list = {
+        'id': str(shopping_list['_id']),
+        'name': shopping_list.get('name'),
+        'budget': float(shopping_list.get('budget', 0.0)),
+        'total_spent': float(shopping_list.get('total_spent', 0.0)),
+        'status': shopping_list.get('status', 'active'),
+        'created_at': shopping_list.get('created_at'),
+        'collaborators': shopping_list.get('collaborators', []),
+        'items': [{
+            'id': str(item['_id']),
+            'name': item.get('name'),
+            'quantity': item.get('quantity', 1),
+            'price': float(item.get('price', 0.0)),
+            'unit': item.get('unit', 'piece'),
+            'category': item.get('category', 'other'),
+            'status': item.get('status', 'to_buy'),
+            'store': item.get('store', 'Unknown'),
+            'frequency': item.get('frequency', 7)
+        } for item in list_items]
+    }
+    
+    try:
+        html = render_template(
+            'personal/SHOPPING/partials/manage_list_details.html',
+            list_form=ShoppingListForm(data={'list_name': selected_list['name'], 'list_budget': selected_list['budget']}),
+            item_form=ShoppingItemForm(),
+            selected_list=selected_list,
+            selected_list_id=list_id,
+            items=selected_list['items'],
+            format_currency=format_currency,
+            format_datetime=format_date,
+            trans=trans
+        )
+        return jsonify({'success': True, 'html': html})
+    except Exception as e:
+        logger.error(f"Error rendering list details for {list_id}: {str(e)}")
+        return jsonify({'success': False, 'error': trans('shopping_load_error', default='Failed to load list details.')}), 500
+
 @shopping_bp.route('/lists/<list_id>/manage', methods=['GET', 'POST'])
 @login_required
 @requires_role(['personal', 'admin'])
