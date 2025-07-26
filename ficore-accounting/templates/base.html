@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha384-PPIZEGYM1v8zp5Py7UjFb79S58UeqCL9pYVnVPURKEqvioPROaVAJKKLzvH2rDnI" crossorigin="anonymous">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') | e }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/newbasefilelooks.css') | e }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/iconslooks.css') | e }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/iconlooks.css') | e }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/newhomepagepersonal.css') | e }}">
     <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') | e }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') | e }}">
@@ -84,7 +84,7 @@
                             <a class="nav-link {% if request.endpoint == 'users.signup' %}active{% endif %}" href="{{ url_for('users.signup') | e }}" data-bs-toggle="tooltip" data-bs-title="{{ t('general_signup_tooltip', default='Create a new account') | e }}" aria-current="{% if request.endpoint == 'users.signup' %}page{% endif %}">{{ t('general_signup', default='Sign Up') | e }}</a>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link btn btn-link language-toggle" id="languageToggle" onclick="toggleLanguage()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_language_toggle_tooltip', default='Toggle language') | e }}" aria-label="{{ t('general_language_toggle', default='Toggle language') | e }}">
+                            <button class="nav-link btn btn-link language-toggle" id="languageToggle" onclick="toggleLanguage()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_language_toggle_tooltip', default='Toggle language') | e }}" aria-label="{{ t('general_language_toggle', default='Toggle='Toggle language') | e }}">
                                 <i class="bi bi-globe"></i>
                                 <span id="languageText">{{ 'ENGLISH' if lang == 'en' else 'HAUSA' }}</span>
                             </button>
@@ -396,7 +396,10 @@
             localStorage.setItem('dark_mode', isDark);
             const toggles = document.querySelectorAll('#darkModeToggle');
             toggles.forEach(darkModeToggle => {
-                darkModeToggle.querySelector('i').className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
+                const icon = darkModeToggle.querySelector('i');
+                icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
+                icon.style.color = isDark ? '#ffc107' : '#6c757d'; // Yellow for sun, gray for moon
+                icon.style.transform = isDark ? 'scale(1.1)' : 'scale(1)';
                 darkModeToggle.setAttribute('data-bs-title', isDark ? '{{ t("general_mode_toggle_tooltip_switch_to_light", default="Switch to light mode") | e }}' : '{{ t("general_mode_toggle_tooltip_switch_to_dark", default="Switch to dark mode") | e }}');
                 darkModeToggle.setAttribute('aria-label', isDark ? '{{ t("general_mode_toggle_light", default="Toggle light mode") | e }}' : '{{ t("general_mode_toggle_dark", default="Toggle dark mode") | e }}');
                 const tooltip = bootstrap.Tooltip.getInstance(darkModeToggle);
