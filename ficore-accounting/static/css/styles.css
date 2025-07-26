@@ -3317,39 +3317,58 @@ a.text-decoration-none:hover .btn-outline-primary {
         line-height: 1.5;
         font-size: 0.9rem;
     }
-    .login-page .btn-primary {
-        background: linear-gradient(135deg, #4f46e5, #7c3aed);
-        border: none;
-        border-radius: 8px;
-        padding: 0.75rem;
-        font-weight: 600;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        transition: all 0.3s ease;
-        position: relative;
-        overflow: hidden;
-    }
-    .login-page .btn-primary:hover {
-        background: linear-gradient(135deg, #4338ca, #6d28d9);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        transform: translateY(-2px);
-    }
-    .login-page .btn-primary:active {
-        transform: translateY(0);
-    }
-    .login-page .btn-primary.loading::after {
-        content: '';
-        display: inline-block;
-        width: 1.5rem;
-        height: 1.5rem;
-        border: 2px solid #ffffff;
-        border-radius: 50%;
-        border-top-color: transparent;
-        animation: spin 0.8s linear infinite;
-        position: absolute;
-        right: 1rem;
-        top: 50%;
-        transform: translateY(-50%);
-    }
+.login-page .btn-primary {
+    background: var(--button-primary-bg, #b88a44);
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.login-page .btn-primary:hover {
+    background: var(--button-primary-hover, #917243);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+}
+.login-page .btn-primary:active {
+    transform: translateY(0);
+}
+.login-page .btn-primary.loading::after {
+    content: '';
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.login-page .btn-secondary {
+    background: var(--button-secondary-bg, linear-gradient(to bottom, white, #f8faff));
+    border: 2px solid var(--button-secondary-border, #3A86FF);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.login-page .btn-secondary:hover {
+    background: var(--button-secondary-hover, #e8f0ff);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+}
+.login-page .btn-secondary:active {
+    transform: translateY(0);
+}
     @keyframes spin {
         to { transform: translateY(-50%) rotate(360deg); }
     }
