@@ -1,0 +1,43 @@
+/* General icon styling */
+.bi {
+    transition: all 0.3s ease;
+}
+
+/* Specific icon styles */
+.bi-cart { color: #17a2b8; font-size: 1.8rem; }
+.bi-receipt { color: #ffc107; font-size: 1.8rem; }
+.bi-wallet, .bi-wallet2 { color: #6610f2; font-size: 1.8rem; }
+.bi-coin { color: #28a745; font-size: 1.8rem; }
+.bi-house { color: #343a40; font-size: 1.8rem; }
+.bi-person { color: #007bff; font-size: 1.8rem; }
+.bi-calculator { color: #dc3545; font-size: 1.8rem; }
+.bi-journal-minus { color: #6c757d; font-size: 1.8rem; }
+.bi-person-plus { color: #17a2b8; font-size: 1.8rem; }
+.bi-arrow-up-circle { color: #ff6f61; font-size: 1.8rem; }
+.bi-cash-coin { color: #28a745; font-size: 1.8rem; }
+.bi-person-workspace { color: #007bff; font-size: 1.8rem; }
+.bi-speedometer { color: #343a40; font-size: 1.8rem; }
+.bi-people { color: #6610f2; font-size: 1.8rem; }
+.bi-file-earmark-text { color: #6c757d; font-size: 1.8rem; }
+.bi-pie-chart { color: #007bff; font-size: 1.8rem; }
+.bi-plus-circle { color: #28a745; font-size: 1.6rem; }
+.bi-chevron-right { color: #6c757d; font-size: 1.2rem; }
+.bi-info-circle { color: #6c757d; font-size: 1.4rem; }
+.bi-eye, .bi-eye-slash { color: #343a40; font-size: 1.4rem; }
+.bi-question-circle { color: #ff6f61; font-size: 1.4rem; border: 1px solid #ff6f61; border-radius: 50%; padding: 2px; }
+
+/* Hover effects */
+.personal-quick-action-item:hover .bi,
+.personal-service-grid-item:hover .bi {
+    transform: scale(1.1);
+}
+
+/* Contextual styling */
+.personal-snapshot-item .bi {
+    margin-right: 10px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+    .bi { font-size: 1.2rem !important; }
+}
