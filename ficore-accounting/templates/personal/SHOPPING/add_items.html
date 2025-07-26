@@ -176,119 +176,148 @@
     <div class="tab-content" id="shoppingTabContent">
         <div class="tab-pane fade show active" id="dashboard" role="tabpanel" aria-labelledby="dashboard-tab">
             <div class="card">
+                <div class="card-header">
+                    <h5><i class="fa-solid fa-list"></i> {{ t('shopping_add_items', default='Add Items to List') | e }}</h5>
+                </div>
                 <div class="card-body">
-                    {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h6><i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item to List') | e }}</h6>
-                            </div>
-                            <div class="card-body">
-                                <form id="addItemForm" class="validate-form">
-                                    <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_name" class="form-label">{{ t('general_item_name', default='Item Name') | e }}</label>
-                                            <input type="text" id="item_name" class="form-control" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
-                                            <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_quantity" class="form-label">{{ t('general_quantity', default='Quantity') | e }}</label>
-                                            <input type="number" id="item_quantity" class="form-control number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" required>
-                                            <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
-                                        </div>
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
-                                            <input type="text" id="item_price" class="form-control number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" required>
-                                            <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_unit" class="form-label">{{ t('general_unit', default='Unit') | e }}</label>
-                                            <select id="item_unit" class="form-control" required>
-                                                {% for value, label in item_form.unit.choices %}
-                                                    <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_store" class="form-label">{{ t('general_store', default='Store') | e }}</label>
-                                            <input type="text" id="item_store" class="form-control" placeholder="{{ t('shopping_store_placeholder', default='e.g., Shoprite') | e }}">
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_category" class="form-label">{{ t('general_category', default='Category') | e }}</label>
-                                            <select id="item_category" class="form-control" required>
-                                                {% for value, label in item_form.category.choices %}
-                                                    <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_status" class="form-label">{{ t('general_status', default='Status') | e }}</label>
-                                            <select id="item_status" class="form-control" required>
-                                                {% for value, label in item_form.status.choices %}
-                                                    <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="item_frequency" class="form-label">{{ t('general_frequency', default='Frequency') | e }}</label>
-                                            <input type="number" id="item_frequency" class="form-control number-input" placeholder="{{ t('shopping_frequency_placeholder', default='e.g., 7') | e }}" min="1" max="365">
-                                            <small class="form-text text-muted">{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}</small>
-                                        </div>
-                                    </div>
-                                    <button type="button" class="btn btn-primary" id="addItemSubmit">
-                                        <i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item') | e }}
-                                    </button>
-                                </form>
-                            </div>
+                    {% if lists %}
+                        <div class="mb-3">
+                            <label for="dashboard-list-select" class="form-label">{{ t('shopping_select_list', default='Select a Shopping List') | e }}</label>
+                            <select id="dashboard-list-select" class="form-select" onchange="loadListItems(this.value)">
+                                <option value="">{{ t('general_select', default='Select a list') | e }}</option>
+                                {% for list_id, lst in lists.items() %}
+                                    {% if lst.status != 'saved' %}
+                                        <option value="{{ lst.id | e }}" {{ 'selected' if selected_list_id == lst.id else '' }}>{{ lst.name | e }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
                         </div>
+                        <div id="dashboard-content">
+                            {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
+                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget) | e }}</span></p>
+                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent) | e }}</span></p>
+                                <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">{{ format_currency(selected_list.budget - selected_list.total_spent) | e }}</span></p>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" style="width: {{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h6><i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item to List') | e }}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <form id="addItemForm" class="validate-form">
+                                            <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_name" class="form-label">{{ t('general_item_name', default='Item Name') | e }}</label>
+                                                    <input type="text" id="item_name" class="form-control" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
+                                                    <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_quantity" class="form-label">{{ t('general_quantity', default='Quantity') | e }}</label>
+                                                    <input type="number" id="item_quantity" class="form-control number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" required>
+                                                    <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
+                                                    <input type="text" id="item_price" class="form-control number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" required>
+                                                    <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_unit" class="form-label">{{ t('general_unit', default='Unit') | e }}</label>
+                                                    <select id="item_unit" class="form-control" required>
+                                                        {% for value, label in item_form.unit.choices %}
+                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_store" class="form-label">{{ t('general_store', default='Store') | e }}</label>
+                                                    <input type="text" id="item_store" class="form-control" placeholder="{{ t('shopping_store_placeholder', default='e.g., Shoprite') | e }}">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_category" class="form-label">{{ t('general_category', default='Category') | e }}</label>
+                                                    <select id="item_category" class="form-control" required>
+                                                        {% for value, label in item_form.category.choices %}
+                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_status" class="form-label">{{ t('general_status', default='Status') | e }}</label>
+                                                    <select id="item_status" class="form-control" required>
+                                                        {% for value, label in item_form.status.choices %}
+                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label for="item_frequency" class="form-label">{{ t('general_frequency', default='Frequency') | e }}</label>
+                                                    <input type="number" id="item_frequency" class="form-control number-input" placeholder="{{ t('shopping_frequency_placeholder', default='e.g., 7') | e }}" min="1" max="365">
+                                                    <small class="form-text text-muted">{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}</small>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-primary" id="addItemSubmit">
+                                                <i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item') | e }}
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
 
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-striped" id="items-table">
-                                        <thead>
-                                            <tr>
-                                                <th>{{ t('general_item_name', default='Item Name') | e }}</th>
-                                                <th>{{ t('general_quantity', default='Quantity') | e }}</th>
-                                                <th>{{ t('general_price', default='Price') | e }}</th>
-                                                <th>{{ t('general_unit', default='Unit') | e }}</th>
-                                                <th>{{ t('general_category', default='Category') | e }}</th>
-                                                <th>{{ t('general_status', default='Status') | e }}</th>
-                                                <th>{{ t('general_store', default='Store') | e }}</th>
-                                                <th>{{ t('general_frequency', default='Frequency') | e }}</th>
-                                                <th>{{ t('general_actions', default='Actions') | e }}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="items-table-body">
-                                        </tbody>
-                                    </table>
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-striped" id="items-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>{{ t('general_item_name', default='Item Name') | e }}</th>
+                                                        <th>{{ t('general_quantity', default='Quantity') | e }}</th>
+                                                        <th>{{ t('general_price', default='Price') | e }}</th>
+                                                        <th>{{ t('general_unit', default='Unit') | e }}</th>
+                                                        <th>{{ t('general_category', default='Category') | e }}</th>
+                                                        <th>{{ t('general_status', default='Status') | e }}</th>
+                                                        <th>{{ t('general_store', default='Store') | e }}</th>
+                                                        <th>{{ t('general_frequency', default='Frequency') | e }}</th>
+                                                        <th>{{ t('general_actions', default='Actions') | e }}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="items-table-body">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div class="mt-3">
+                                            <form method="POST" action="{{ url_for('personal.shopping.main', tab='dashboard') | e }}" class="d-inline validate-form" id="saveListForm">
+                                                <input type="hidden" name="action" value="save_list">
+                                                <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
+                                                {{ list_form.csrf_token }}
+                                                <button type="submit" class="btn btn-primary" id="saveListSubmit">
+                                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                                    <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="mt-3">
-                                    <form method="POST" action="{{ url_for('personal.shopping.main', tab='dashboard') | e }}" class="d-inline validate-form" id="saveListForm">
-                                        <input type="hidden" name="action" value="save_list">
-                                        <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                        {{ list_form.csrf_token }}
-                                        <button type="submit" class="btn btn-primary" id="saveListSubmit">
-                                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                                            <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
-                                        </button>
-                                    </form>
+                            {% else %}
+                                <div class="empty-state text-center">
+                                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                                    <p>{{ t('shopping_no_list_selected', default='No active list selected. Please select an active list to add items.') | e }}</p>
                                 </div>
-                            </div>
+                            {% endif %}
                         </div>
                     {% else %}
                         <div class="empty-state text-center">
                             <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                            <p>{{ t('shopping_no_list_selected', default='No list selected or the selected list is saved. Please select an unsaved list to manage.') | e }}</p>
+                            <p>{{ t('shopping_no_lists', default='No active lists found. Create one to get started.') | e }}</p>
                         </div>
                     {% endif %}
                 </div>
@@ -659,11 +688,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Calculate total cost for frontend items
+    // Calculate total cost for frontend and backend items
     function calculateFrontendTotal() {
         return items.reduce((total, item) => {
             return total + (item.quantity * item.price);
-        }, 0);
+        }, parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0);
     }
 
     // Update budget progress
@@ -689,6 +718,201 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Load list items via AJAX
+    function loadListItems(listId) {
+        if (window.isAuthenticatedContentBlocked) return;
+        const contentDiv = document.getElementById('dashboard-content');
+        if (!listId) {
+            contentDiv.innerHTML = `
+                <div class="empty-state text-center">
+                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                    <p>{{ t('shopping_no_list_selected', default='No active list selected. Please select an active list to add items.') | e }}</p>
+                </div>
+            `;
+            items = [];
+            updateItemsTable();
+            return;
+        }
+
+        contentDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+
+        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=dashboard', {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.html) {
+                contentDiv.innerHTML = data.html;
+                items = data.items || [];
+                updateItemsTable();
+                // Re-attach event listeners for number inputs
+                document.querySelectorAll('.number-input').forEach(input => {
+                    const isInteger = input.id.includes('quantity') || input.id.includes('frequency');
+                    input.addEventListener('focus', function() {
+                        let currentValue = input.value;
+                        input.value = cleanForParse(currentValue);
+                    });
+                    input.addEventListener('blur', function() {
+                        let rawValue = cleanForParse(input.value);
+                        let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+                        input.value = formatForDisplay(numValue, isInteger);
+                        updateBudgetProgress();
+                    });
+                    input.addEventListener('input', function() {
+                        let value = input.value;
+                        let cleanedValue = isInteger ? value.replace(/[^0-9]/g, '') : value.replace(/[^0-9.]/g, '');
+                        if (!isInteger) {
+                            const parts = cleanedValue.split('.');
+                            if (parts.length > 2) {
+                                cleanedValue = parts[0] + '.' + parts.slice(1).join('');
+                            }
+                        }
+                        if (input.value !== cleanedValue) {
+                            const start = input.selectionStart;
+                            const end = input.selectionEnd;
+                            input.value = cleanedValue;
+                            input.setSelectionRange(start, end);
+                        }
+                        updateBudgetProgress();
+                    });
+                    input.dispatchEvent(new Event('blur'));
+                });
+                // Re-attach form validation
+                document.querySelectorAll('.validate-form').forEach(form => {
+                    form.addEventListener('submit', function(e) {
+                        if (window.isAuthenticatedContentBlocked) {
+                            e.preventDefault();
+                            return;
+                        }
+                        let formIsValid = true;
+                        form.querySelectorAll('.number-input').forEach(input => {
+                            const isInteger = input.id.includes('quantity') || input.id.includes('frequency');
+                            let rawValue = cleanForParse(input.value);
+                            let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+
+                            if (isInteger) {
+                                if (input.id.includes('quantity') && numValue > 1000) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['quantity_max'];
+                                    formIsValid = false;
+                                } else if (input.id.includes('frequency') && numValue > 365) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
+                                    formIsValid = false;
+                                } else if (numValue < 0) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                                    formIsValid = false;
+                                } else {
+                                    input.classList.remove('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+                                }
+                            } else {
+                                if (numValue > 10000000000 || numValue < 0) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = numValue > 10000000000 ? helpTextTranslations['amount_max'] : helpTextTranslations['amount_positive'];
+                                    formIsValid = false;
+                                } else {
+                                    input.classList.remove('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['price'];
+                                }
+                            }
+                            input.value = isInteger ? numValue.toString() : numValue.toFixed(2);
+                        });
+
+                        if (form.id === 'saveListForm') {
+                            const itemNames = items.map(item => item.name.trim().toLowerCase());
+                            const uniqueNames = new Set(itemNames);
+                            if (itemNames.length !== uniqueNames.size) {
+                                document.getElementById('duplicateWarning').classList.remove('d-none');
+                                formIsValid = false;
+                            } else {
+                                document.getElementById('duplicateWarning').classList.add('d-none');
+                            }
+
+                            const total = calculateFrontendTotal();
+                            const budget = parseFloat(cleanForParse(document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
+                            if (total > budget && budget > 0) {
+                                e.preventDefault();
+                                const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
+                                modal.show();
+                                document.getElementById('proceedSubmit').onclick = function() {
+                                    form.dataset.allowSubmit = 'true';
+                                    form.submit();
+                                };
+                                formIsValid = false;
+                            }
+                        }
+
+                        if (!formIsValid && !form.dataset.allowSubmit) {
+                            e.preventDefault();
+                            const firstInvalid = form.querySelector('.is-invalid');
+                            if (firstInvalid) {
+                                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                firstInvalid.focus();
+                            }
+                        }
+
+                        if (form.id === 'saveListForm' && formIsValid) {
+                            items.forEach((item, index) => {
+                                const itemFields = ['name', 'quantity', 'price', 'unit', 'category', 'status', 'store', 'frequency'];
+                                itemFields.forEach(field => {
+                                    const input = document.createElement('input');
+                                    input.type = 'hidden';
+                                    input.name = `items[${index}][${field}]`;
+                                    input.value = item[field] || '';
+                                    form.appendChild(input);
+                                });
+                            });
+                        }
+
+                        const submitButton = form.querySelector('button[type="submit"]');
+                        if (submitButton && formIsValid) {
+                            submitButton.disabled = true;
+                            submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+                            submitButton.querySelector('i')?.classList.add('d-none');
+                        }
+                    });
+                });
+                updateBudgetProgress();
+            } else {
+                contentDiv.innerHTML = `
+                    <div class="empty-state text-center">
+                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                        <p>${data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}"}</p>
+                    </div>
+                `;
+                items = [];
+                updateItemsTable();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading list items:', error);
+            contentDiv.innerHTML = `
+                <div class="empty-state text-center">
+                    <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                    <p>{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}</p>
+                </div>
+            `;
+            items = [];
+            updateItemsTable();
+        });
+    }
+
     // Tab persistence with sessionStorage
     sessionStorage.setItem('activeShoppingTab', 'dashboard');
 
@@ -709,8 +933,15 @@ document.addEventListener('DOMContentLoaded', function() {
         new bootstrap.Toast(toast).show();
     });
 
-    // Initialize items table
+    // Initialize budget progress and items table
+    updateBudgetProgress();
     updateItemsTable();
+
+    // Trigger load if a list is pre-selected
+    const select = document.getElementById('dashboard-list-select');
+    if (select && select.value) {
+        loadListItems(select.value);
+    }
 });
 </script>
 {% endblock %}
