@@ -171,7 +171,7 @@
                     </select>
                 </div>
                 <div id="manage-list-details">
-                    {% if selected_list and selected_list.id and selected_list.status == 'saved' %}
+                    {% if selected_list and selected_list.id %}
                         <form method="POST" action="{{ url_for('personal.shopping.main', tab='manage-list') | e }}" id="manageListForm" class="validate-form">
                             {{ list_form.hidden_tag() }}
                             <input type="hidden" name="action" value="save_list_changes">
@@ -319,7 +319,7 @@
                     {% else %}
                         <div class="empty-state text-center">
                             <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                            <p>{{ t('shopping_no_list_selected', default='No list selected or the selected list is not saved. Please select a saved list to manage.') | e }}</p>
+                            <p>{{ t('shopping_no_list_selected', default='No list selected. Please select a list to manage.') | e }}</p>
                         </div>
                     {% endif %}
                 </div>
@@ -734,7 +734,90 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Re-attach form validation
                 document.querySelectorAll('.validate-form').forEach(form => {
                     form.addEventListener('submit', function(e) {
-                        // Re-attach submit handler (same as above, not repeated for brevity)
+                        if (window.isAuthenticatedContentBlocked) {
+                            e.preventDefault();
+                            return;
+                        }
+                        let formIsValid = true;
+                        form.querySelectorAll('.number-input').forEach(input => {
+                            const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
+                            let rawValue = cleanForParse(input.value);
+                            let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+
+                            if (isInteger) {
+                                if ((input.id.includes('quantity') || input.classList.contains('new-item-quantity')) && numValue > 1000) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['quantity_max'];
+                                    formIsValid = false;
+                                } else if ((input.id.includes('frequency') || input.classList.contains('new-item-frequency')) && numValue > 365) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
+                                    formIsValid = false;
+                                } else if (numValue < 0) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                                    formIsValid = false;
+                                } else {
+                                    input.classList.remove('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+                                }
+                            } else {
+                                if (numValue > 10000000000 || numValue < 0) {
+                                    input.classList.add('is-invalid');
+                                    input.nextElementSibling.innerText = numValue > 10000000000 ? helpTextTranslations['amount_max'] : helpTextTranslations['amount_positive'];
+                                    formIsValid = false;
+                                } else {
+                                    input.classList.remove('is-invalid');
+                                    input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'];
+                                }
+                            }
+                            input.value = isInteger ? numValue.toString() : numValue.toFixed(2);
+                        });
+
+                        if (form.id === 'manageListForm') {
+                            const itemNames = [];
+                            form.querySelectorAll('input[name$="_name"]').forEach(input => {
+                                if (input.value.trim()) {
+                                    itemNames.push(input.value.trim().toLowerCase());
+                                }
+                            });
+                            const uniqueNames = new Set(itemNames);
+                            if (itemNames.length !== uniqueNames.size) {
+                                document.getElementById('duplicateWarning').classList.remove('d-none');
+                                formIsValid = false;
+                            } else {
+                                document.getElementById('duplicateWarning').classList.add('d-none');
+                            }
+
+                            const total = calculateTotalCost(form);
+                            const budget = parseFloat(cleanForParse(document.getElementById('list_budget')?.value)) || {{ selected_list.budget | default(0) }};
+                            if (total > budget && budget > 0) {
+                                e.preventDefault();
+                                const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
+                                modal.show();
+                                document.getElementById('proceedSubmit').onclick = function() {
+                                    form.dataset.allowSubmit = 'true';
+                                    form.submit();
+                                };
+                                formIsValid = false;
+                            }
+                        }
+
+                        if (!formIsValid && !form.dataset.allowSubmit) {
+                            e.preventDefault();
+                            const firstInvalid = form.querySelector('.is-invalid');
+                            if (firstInvalid) {
+                                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                firstInvalid.focus();
+                            }
+                        }
+
+                        const submitButton = form.querySelector('button[type="submit"]');
+                        if (submitButton && formIsValid) {
+                            submitButton.disabled = true;
+                            submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+                            submitButton.querySelector('i')?.classList.add('d-none');
+                        }
                     });
                 });
                 updateBudgetProgress();
