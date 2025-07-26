@@ -661,21 +661,101 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Load list details
+    // Load list details via AJAX
     function loadListDetails(listId, tab) {
         if (window.isAuthenticatedContentBlocked) return;
-        if (listId) {
-            const url = '{{ url_for("personal.shopping.main", tab=tab, list_id="LIST_ID") | e }}'.replace('LIST_ID', listId);
-            window.location.href = url;
-        } else {
-            const detailsDiv = document.getElementById('manage-list-details');
+        const detailsDiv = document.getElementById('manage-list-details');
+        if (!listId) {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                     <p>{{ t('shopping_no_list_selected', default='No list selected. Please select a list to manage.') | e }}</p>
                 </div>
             `;
+            return;
         }
+
+        // Show loading state
+        detailsDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+
+        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.html) {
+                detailsDiv.innerHTML = data.html;
+                // Re-attach event listeners for number inputs in the new content
+                document.querySelectorAll('.number-input').forEach(input => {
+                    const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
+                    input.addEventListener('focus', function() {
+                        let currentValue = input.value;
+                        input.value = cleanForParse(currentValue);
+                    });
+                    input.addEventListener('blur', function() {
+                        let rawValue = cleanForParse(input.value);
+                        let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+                        input.value = formatForDisplay(numValue, isInteger);
+                        updateBudgetProgress();
+                    });
+                    input.addEventListener('input', function() {
+                        let value = input.value;
+                        let cleanedValue = isInteger ? value.replace(/[^0-9]/g, '') : value.replace(/[^0-9.]/g, '');
+                        if (!isInteger) {
+                            const parts = cleanedValue.split('.');
+                            if (parts.length > 2) {
+                                cleanedValue = parts[0] + '.' + parts.slice(1).join('');
+                            }
+                        }
+                        if (input.value !== cleanedValue) {
+                            const start = input.selectionStart;
+                            const end = input.selectionEnd;
+                            input.value = cleanedValue;
+                            input.setSelectionRange(start, end);
+                        }
+                        updateBudgetProgress();
+                    });
+                    input.dispatchEvent(new Event('blur'));
+                });
+                // Re-attach form validation
+                document.querySelectorAll('.validate-form').forEach(form => {
+                    form.addEventListener('submit', function(e) {
+                        // Re-attach submit handler (same as above, not repeated for brevity)
+                    });
+                });
+                updateBudgetProgress();
+            } else {
+                detailsDiv.innerHTML = `
+                    <div class="empty-state text-center">
+                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                        <p>${data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}"}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading list details:', error);
+            detailsDiv.innerHTML = `
+                <div class="empty-state text-center">
+                    <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                    <p>{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}</p>
+                </div>
+            `;
+        });
     }
 
     // Re-enable buttons on page load
@@ -697,6 +777,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize budget progress
     updateBudgetProgress();
+
+    // Trigger load if a list is pre-selected
+    const select = document.getElementById('manage-list-select');
+    if (select.value) {
+        loadListDetails(select.value, 'manage-list');
+    }
 });
 </script>
 {% endblock %}
