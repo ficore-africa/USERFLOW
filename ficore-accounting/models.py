@@ -1856,56 +1856,129 @@ def to_dict_shopping_list(record):
         'status': record.get('status', '')
     }
 
-def create_pending_deletion(db, deletion_data):
+def delete_shopping_list(db, list_id, user_id=None, email=None):
     """
-    Create a new pending deletion record in the pending_deletions collection.
+    Delete a shopping list and its associated items from the shopping_lists and shopping_items collections.
     
     Args:
         db: MongoDB database instance
-        deletion_data: Dictionary containing deletion information
+        list_id: The ID of the shopping list to delete
+        user_id: Optional user ID for ownership check
+        email: Optional email for ownership check
     
     Returns:
-        str: ID of the created pending deletion record
+        bool: True if deleted, False if not found or no changes made
     """
     try:
-        required_fields = ['list_id', 'created_at', 'expires_at']
-        if not all(field in deletion_data for field in required_fields):
-            raise ValueError(trans('general_missing_pending_deletion_fields', default='Missing required pending deletion fields'))
-        result = db.pending_deletions.insert_one(deletion_data)
-        logger.info(f"{trans('general_pending_deletion_created', default='Created pending deletion with ID')}: {result.inserted_id}", 
-                   extra={'session_id': deletion_data.get('session_id', 'no-session-id')})
-        return str(result.inserted_id)
+        filter_criteria = {'_id': list_id}
+        if user_id and email:
+            filter_criteria.update({'user_id': user_id, 'email': email.lower()})
+        
+        with db.client.start_session() as session:
+            with session.start_transaction():
+                # Delete the shopping list
+                list_result = db.shopping_lists.delete_one(filter_criteria)
+                if list_result.deleted_count == 0:
+                    logger.info(f"No shopping list found with ID {list_id} for deletion", 
+                               extra={'session_id': 'no-session-id'})
+                    return False
+                
+                # Delete associated items
+                items_result = db.shopping_items.delete_many({'list_id': list_id})
+                logger.info(f"Deleted shopping list ID {list_id} and {items_result.deleted_count} associated items", 
+                           extra={'session_id': 'no-session-id'})
+                
+                get_shopping_lists.cache_clear()
+                return True
     except Exception as e:
-        logger.error(f"{trans('general_pending_deletion_creation_error', default='Error creating pending deletion')}: {str(e)}", 
-                    exc_info=True, extra={'session_id': deletion_data.get('session_id', 'no-session-id')})
-        raise
-
-def get_pending_deletions(db, filter_kwargs):
-    """
-    Retrieve pending deletion records based on filter criteria.
-    
-    Args:
-        db: MongoDB database instance
-        filter_kwargs: Dictionary of filter criteria
-    
-    Returns:
-        list: List of pending deletion records
-    """
-    try:
-        return list(db.pending_deletions.find(filter_kwargs).sort('created_at', DESCENDING))
-    except Exception as e:
-        logger.error(f"{trans('general_pending_deletions_fetch_error', default='Error getting pending deletions')}: {str(e)}", 
+        logger.error(f"Error deleting shopping list ID {list_id}: {str(e)}", 
                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
 
-def to_dict_pending_deletion(record):
-    """Convert pending deletion record to dictionary."""
-    if not record:
-        return {'list_id': None, 'expires_at': None}
-    return {
-        'id': str(record.get('_id', '')),
-        'list_id': record.get('list_id', ''),
-        'user_id': record.get('user_id', ''),
-        'created_at': record.get('created_at'),
-        'expires_at': record.get('expires_at')
-    }
+def deduct_ficore_credits(db, user_id, email, amount, action, ref=None):
+    """
+    Deduct Ficore credits from a user's balance and log the transaction.
+    
+    Args:
+        db: MongoDB database instance
+        user_id: ID of the user
+        email: Email of the user
+        amount: Amount of credits to deduct
+        action: Type of action (e.g., 'create_shopping_list')
+        ref: Optional reference ID (e.g., list or item ID)
+    
+    Returns:
+        bool: True if successful, False if insufficient credits or failure
+    """
+    try:
+        if amount <= 0:
+            raise ValueError(f"Invalid deduction amount: {amount}")
+        
+        with db.client.start_session() as session:
+            with session.start_transaction():
+                user = db.users.find_one({'_id': user_id, 'email': email.lower()}, session=session)
+                if not user:
+                    logger.error(f"User {user_id}, email: {email} not found for credit deduction", 
+                                extra={'session_id': 'no-session-id'})
+                    return False
+                
+                current_balance = user.get('ficore_credit_balance', 0)
+                if current_balance < amount:
+                    logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}", 
+                                  extra={'session_id': 'no-session-id'})
+                    return False
+                
+                result = db.users.update_one(
+                    {'_id': user_id, 'email': email.lower()},
+                    {'$inc': {'ficore_credit_balance': -amount}},
+                    session=session
+                )
+                if result.modified_count == 0:
+                    raise ValueError("Failed to update user balance")
+                
+                transaction = {
+                    'user_id': user_id,
+                    'email': email.lower(),
+                    'amount': -amount,
+                    'type': action,
+                    'ref': ref,
+                    'date': datetime.utcnow()
+                }
+                db.ficore_credit_transactions.insert_one(transaction, session=session)
+                
+                get_user.cache_clear()
+                get_user_by_email.cache_clear()
+                logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}", 
+                           extra={'session_id': 'no-session-id'})
+                return True
+    except Exception as e:
+        logger.error(f"Error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}", 
+                    exc_info=True, extra={'session_id': 'no-session-id'})
+        return False
+
+def create_shopping_items_bulk(db, items_data):
+    """
+    Create multiple shopping items in the shopping_items collection in a single operation.
+    
+    Args:
+        db: MongoDB database instance
+        items_data: List of dictionaries containing shopping item information
+    
+    Returns:
+        list: List of IDs of the created shopping items
+    """
+    try:
+        required_fields = ['user_id', 'list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at']
+        for item in items_data:
+            if not all(field in item for field in required_fields):
+                raise ValueError(f"Missing required fields in item: {item}")
+        
+        result = db.shopping_items.insert_many(items_data)
+        logger.info(f"Created {len(result.inserted_ids)} shopping items", 
+                   extra={'session_id': items_data[0].get('session_id', 'no-session-id')})
+        return [str(id) for id in result.inserted_ids]
+    except Exception as e:
+        logger.error(f"Error creating bulk shopping items: {str(e)}", 
+                    exc_info=True, extra={'session_id': items_data[0].get('session_id', 'no-session-id') if items_data else 'no-session-id'})
+        raise
+
