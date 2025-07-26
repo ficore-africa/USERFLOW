@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}
+{{ t('shopping_title', default='Shopping List Manager') | e }}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1055;
+    }
+    .form-control-sm {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .dark-mode .toast {
+        background-color: #343a40;
+        color: #ffffff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% set tool_name = 'shopping_title' %}
+    {% set tool_icon = 'fa-cart-shopping' %}
+    {% set subtitle = t('shopping_subtitle', default='Organize and manage your shopping lists efficiently') | e %}
+    {% include 'personal/GENERAL/tool_header.html' %}
+
+    <!-- Toast Container -->
+    <div class="toast-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="toast align-items-center text-white bg-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'warning' }} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            {{ t(message, default=message) | e }}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endwith %}
+    </div>
+
+    <ul class="nav nav-tabs mb-4" id="shoppingTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="create-list-tab" data-bs-toggle="tab" data-bs-target="#create-list" type="button" role="tab" aria-controls="create-list" aria-selected="true">
+                <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link" href="{{ url_for('personal.shopping.main', tab='dashboard') | e }}">
+                <i class="fa-solid fa-chart-line"></i> {{ t('shopping_dashboard', default='Dashboard') | e }}
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link" href="{{ url_for('personal.shopping.main', tab='manage-list') | e }}">
+                <i class="fa-solid fa-list"></i> {{ t('shopping_manage_list', default='Manage List') | e }}
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="shoppingTabContent">
+        <div class="tab-pane fade show active" id="create-list" role="tabpanel" aria-labelledby="create-list-tab">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fa-solid fa-cart-shopping"></i> {{ t('shopping_create_list', default='Create New Shopping List') | e }}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('personal.shopping.main', tab='dashboard') | e }}" id="createListForm" class="validate-form">
+                        {{ list_form.hidden_tag() }}
+                        <input type="hidden" name="action" value="create_list">
+                        <div class="mb-3">
+                            <label for="{{ list_form.name.id }}" class="form-label">{{ t('general_list_name', default='List Name') | e }}</label>
+                            {{ list_form.name(class="form-control", placeholder=t('shopping_list_name_placeholder', default='e.g., Weekly Groceries') | e) }}
+                            <div class="invalid-feedback">{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="{{ list_form.budget.id }}" class="form-label">{{ t('general_budget', default='Budget') | e }}</label>
+                            {{ list_form.budget(class="form-control number-input", placeholder=t('shopping_budget_placeholder', default='e.g., 100,000.00') | e, value='' if list_form.budget.data is none else format_currency(list_form.budget.data)) }}
+                            <div class="invalid-feedback">{{ t('shopping_budget_invalid', default='Please enter a valid number (e.g., 100000 or 100000.00)') | e }}</div>
+                            <small id="budget_help" class="form-text text-muted">{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="createListSubmit">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Translation map for help text
+    const helpTextTranslations = {
+        'budget': "{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}",
+        'amount_max': "{{ t('shopping_amount_max', default='Input cannot exceed 10 billion') | e }}",
+        'amount_positive': "{{ t('shopping_amount_positive', default='Amount must be positive') | e }}"
+    };
+
+    // Helper function to format a number for display
+    function formatForDisplay(value) {
+        if (value === null || value === undefined || isNaN(value)) {
+            return '';
+        }
+        return parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Helper function to clean input for numeric parsing
+    function cleanForParse(value) {
+        if (!value) return '';
+        let clean = value.replace(/,/g, '');
+        const parts = clean.split('.');
+        if (parts.length > 2) {
+            clean = parts[0] + '.' + parts.slice(1).join('');
+        }
+        return clean;
+    }
+
+    // Apply formatting and validation to number inputs
+    document.querySelectorAll('.number-input').forEach(input => {
+        input.addEventListener('focus', function() {
+            let currentValue = input.value;
+            input.value = cleanForParse(currentValue);
+        });
+
+        input.addEventListener('blur', function() {
+            let rawValue = cleanForParse(input.value);
+            let numValue = parseFloat(rawValue) || 0;
+
+            if (numValue > 10000000000) {
+                numValue = 10000000000;
+                input.classList.add('is-invalid');
+                input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+            } else if (numValue < 0) {
+                numValue = 0;
+                input.classList.add('is-invalid');
+                input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+            } else {
+                input.classList.remove('is-invalid');
+                input.nextElementSibling.innerText = helpTextTranslations['budget'];
+            }
+            input.value = formatForDisplay(numValue);
+        });
+
+        input.addEventListener('input', function() {
+            let value = input.value;
+            let cleanedValue = value.replace(/[^0-9.]/g, '');
+            const parts = cleanedValue.split('.');
+            if (parts.length > 2) {
+                cleanedValue = parts[0] + '.' + parts.slice(1).join('');
+            }
+            if (input.value !== cleanedValue) {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = cleanedValue;
+                input.setSelectionRange(start, end);
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            let pasted = (e.clipboardData || window.clipboardData).getData('text');
+            let clean = pasted.replace(/[^0-9.]/g, '');
+            if (!clean) return;
+
+            const parts = clean.split('.');
+            if (parts.length > 2) {
+                clean = parts[0] + '.' + parts.slice(1).join('');
+            }
+            if (parts.length > 1) {
+                parts[1] = parts[1].slice(0, 2);
+                clean = parts[0] + (parts[1] ? '.' + parts[1] : '');
+            }
+            input.value = clean;
+            input.dispatchEvent(new Event('blur'));
+        });
+
+        input.dispatchEvent(new Event('blur'));
+    });
+
+    // Form validation on submit
+    document.querySelectorAll('.validate-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (window.isAuthenticatedContentBlocked) {
+                e.preventDefault();
+                return;
+            }
+            let formIsValid = true;
+            form.querySelectorAll('.number-input').forEach(input => {
+                let rawValue = cleanForParse(input.value);
+                let numValue = parseFloat(rawValue) || 0;
+
+                if (numValue > 10000000000 || numValue < 0) {
+                    input.classList.add('is-invalid');
+                    input.nextElementSibling.innerText = numValue > 10000000000 ? helpTextTranslations['amount_max'] : helpTextTranslations['amount_positive'];
+                    formIsValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                    input.nextElementSibling.innerText = helpTextTranslations['budget'];
+                }
+                input.value = numValue.toFixed(2);
+            });
+
+            if (!formIsValid) {
+                e.preventDefault();
+                const firstInvalid = form.querySelector('.is-invalid');
+                if (firstInvalid) {
+                    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    firstInvalid.focus();
+                }
+            }
+
+            const submitButton = form.querySelector('button[type="submit"]');
+            if (submitButton && formIsValid) {
+                submitButton.disabled = true;
+                submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+                submitButton.querySelector('i')?.classList.add('d-none');
+            }
+        });
+    });
+
+    // Tab persistence with sessionStorage
+    sessionStorage.setItem('activeShoppingTab', 'create-list');
+
+    // Re-enable buttons on page load
+    document.querySelectorAll('button[type="submit"]').forEach(button => {
+        button.disabled = false;
+        button.querySelector('.spinner-border')?.classList.add('d-none');
+        button.querySelector('i')?.classList.remove('d-none');
+    });
+
+    // Show toasts
+    document.querySelectorAll('.toast').forEach(toast => {
+        new bootstrap.Toast(toast).show();
+    });
+});
+</script>
+{% endblock %}
