@@ -587,7 +587,7 @@ GENERAL_TRANSLATIONS = {
         'general_faq_roles_answer': 'FiCore offers roles for personal users, traders, and agents to suit your financial needs',
         'general_ready_to_start': 'Ready to Start?',
         'general_signup_prompt': 'Sign up now to take control of your finances',
-        'general_ficore_desc': 'Automating financial clarity in a way nobody else does.',
+        'general_ficore_desc': 'Leading automated clarity and tailored financial services just for you.',
         'general_personal_finance_home': 'Personal Finance Home',
         'general_positive_net_worth': 'Positive Net Worth',
         'general_negative_net_worth': 'Negative Net Worth',
