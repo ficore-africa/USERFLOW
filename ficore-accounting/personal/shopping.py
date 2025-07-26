@@ -531,7 +531,7 @@ def get_list_details():
     
     try:
         html = render_template(
-            'personal/SHOPPING/partials/manage_list_details.html',
+            'personal/SHOPPING/manage_list_details.html',
             list_form=ShoppingListForm(data={'list_name': selected_list['name'], 'list_budget': selected_list['budget']}),
             item_form=ShoppingItemForm(),
             selected_list=selected_list,
