@@ -188,11 +188,11 @@ document.addEventListener('DOMContentLoaded', function() {
         input.dispatchEvent(new Event('blur'));
     });
 
-    // Form validation on submit
+    // Form validation on submit with AJAX
     document.querySelectorAll('.validate-form').forEach(form => {
         form.addEventListener('submit', function(e) {
+            e.preventDefault(); // Prevent default form submission
             if (window.isAuthenticatedContentBlocked) {
-                e.preventDefault();
                 return;
             }
             let formIsValid = true;
@@ -211,21 +211,80 @@ document.addEventListener('DOMContentLoaded', function() {
                 input.value = numValue.toFixed(2);
             });
 
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                formIsValid = false;
+            }
+
             if (!formIsValid) {
-                e.preventDefault();
                 const firstInvalid = form.querySelector('.is-invalid');
                 if (firstInvalid) {
                     firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     firstInvalid.focus();
                 }
+                return;
             }
 
             const submitButton = form.querySelector('button[type="submit"]');
-            if (submitButton && formIsValid) {
-                submitButton.disabled = true;
-                submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
-                submitButton.querySelector('i')?.classList.add('d-none');
-            }
+            submitButton.disabled = true;
+            submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+            submitButton.querySelector('i')?.classList.add('d-none');
+
+            // Submit form via AJAX
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                submitButton.disabled = false;
+                submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                submitButton.querySelector('i')?.classList.remove('d-none');
+
+                if (data.success) {
+                    // Redirect to dashboard with new list ID
+                    window.location.href = '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
+                } else {
+                    // Show error toast
+                    const toastContainer = document.querySelector('.toast-container');
+                    const toastEl = document.createElement('div');
+                    toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+                    toastEl.innerHTML = `
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                ${data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}"}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                        </div>
+                    `;
+                    toastContainer.appendChild(toastEl);
+                    new bootstrap.Toast(toastEl).show();
+                }
+            })
+            .catch(error => {
+                console.error('Error creating list:', error);
+                submitButton.disabled = false;
+                submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                submitButton.querySelector('i')?.classList.remove('d-none');
+
+                const toastContainer = document.querySelector('.toast-container');
+                const toastEl = document.createElement('div');
+                toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+                toastEl.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            {{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                    </div>
+                `;
+                toastContainer.appendChild(toastEl);
+                new bootstrap.Toast(toastEl).show();
+            });
         });
     });
 
