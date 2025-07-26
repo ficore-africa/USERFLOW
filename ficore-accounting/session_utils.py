@@ -14,8 +14,8 @@ def create_anonymous_session():
             
         session['sid'] = str(uuid.uuid4())
         session['is_anonymous'] = True
-        session['created_at'] = datetime.utcnow().isoformat()
-        session.permanent = True
+        session['last_activity'] = datetime.utcnow()  # Use last_activity for timeout tracking
+        session.permanent = False  # Non-permanent session
         
         # Set default language if not already set
         if 'lang' not in session:
@@ -58,7 +58,8 @@ def clear_anonymous_session():
         lang = session.get('lang', 'en')
         session.clear()
         session['lang'] = lang
-        session.permanent = True
+        session.permanent = False  # Non-permanent session
+        session['last_activity'] = datetime.utcnow()  # Initialize for new session
         
         logger.info("Cleared anonymous session data")
     except Exception as e:
@@ -72,7 +73,8 @@ def update_session_language(language):
             
         if language in ['en', 'ha']:
             session['lang'] = language
-            session.permanent = True
+            session.permanent = False  # Non-permanent session
+            session['last_activity'] = datetime.utcnow()  # Update activity
             logger.info(f"Updated session language to: {language}")
             return True
         else:
@@ -93,12 +95,13 @@ def get_session_language():
         return 'en'
 
 def extend_session():
-    """Extend the session expiration."""
+    """Extend the session by updating last_activity."""
     try:
         if not has_request_context():
             return
             
-        session.permanent = True
+        session.permanent = False  # Ensure non-permanent
+        session['last_activity'] = datetime.utcnow()  # Update activity
         session.modified = True
     except Exception as e:
         logger.error(f"Error extending session: {str(e)}")
@@ -113,7 +116,7 @@ def get_session_info():
             'sid': session.get('sid'),
             'is_anonymous': session.get('is_anonymous', False),
             'lang': session.get('lang', 'en'),
-            'created_at': session.get('created_at'),
+            'last_activity': session.get('last_activity'),
             'permanent': session.permanent
         }
     except Exception as e:
