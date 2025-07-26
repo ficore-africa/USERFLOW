@@ -786,7 +786,7 @@ def export_list_pdf(list_id):
                     y -= row_height
                     p.drawString(1 * inch, y * inch, f"{trans('reports_total_spent', default='Total Spent')}: {format_currency(total_spent)}")
                     y -= row_height
-                    p.drawString(1 * inch, y * inch, f'{trans('reports_total_price', default='Total Price')}: {format_currency(total_price)}")
+                    p.drawString(1 * inch, y * inch, f"{trans('reports_total_price', default='Total Price')}: {format_currency(total_price)}")
                 p.save()
                 buffer.seek(0)
                 if current_user.is_authenticated and not is_admin():
