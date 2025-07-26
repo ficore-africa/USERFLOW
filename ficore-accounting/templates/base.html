@@ -84,13 +84,13 @@
                             <a class="nav-link {% if request.endpoint == 'users.signup' %}active{% endif %}" href="{{ url_for('users.signup') | e }}" data-bs-toggle="tooltip" data-bs-title="{{ t('general_signup_tooltip', default='Create a new account') | e }}" aria-current="{% if request.endpoint == 'users.signup' %}page{% endif %}">{{ t('general_signup', default='Sign Up') | e }}</a>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link btn btn-link language-toggle" id="languageToggle" onclick="toggleLanguage()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_language_toggle_tooltip', default='Toggle language') | e }}" aria-label="{{ t('general_language_toggle', default='Toggle='Toggle language') | e }}">
+                            <button class="nav-link btn btn-link language-toggle" id="navLanguageToggle" onclick="toggleLanguage()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_language_toggle_tooltip', default='Toggle language') | e }}" aria-label="{{ t('general_language_toggle', default='Toggle language') | e }}">
                                 <i class="bi bi-globe"></i>
-                                <span id="languageText">{{ 'ENGLISH' if lang == 'en' else 'HAUSA' }}</span>
+                                <span id="navLanguageText">{{ 'ENGLISH' if lang == 'en' else 'HAUSA' }}</span>
                             </button>
                         </li>
                         <li class="nav-item">
-                            <button class="nav-link btn btn-link" id="darkModeToggle" onclick="toggleDarkMode()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_mode_toggle_tooltip_switch_to_dark', default='Switch to dark mode') | e }}" aria-label="{{ t('general_mode_toggle_dark', default='Toggle dark mode') | e }}">
+                            <button class="nav-link btn btn-link" id="navDarkModeToggle" onclick="toggleDarkMode()" data-bs-toggle="tooltip" data-bs-title="{{ t('general_mode_toggle_tooltip_switch_to_dark', default='Switch to dark mode') | e }}" aria-label="{{ t('general_mode_toggle_dark', default='Toggle dark mode') | e }}">
                                 <i class="bi bi-moon-stars"></i>
                             </button>
                         </li>
@@ -333,7 +333,7 @@
                 console.log('Dialogflow Messenger loaded successfully.');
             });
 
-            // Initialize tooltips
+            // Initialize tooltips for all toggle buttons
             document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(tooltipTriggerEl => {
                 new bootstrap.Tooltip(tooltipTriggerEl);
             });
@@ -375,7 +375,7 @@
             const isDark = storedDarkMode === 'true';
             if (isDark) {
                 document.documentElement.classList.add('dark-mode');
-                const toggles = document.querySelectorAll('#darkModeToggle');
+                const toggles = document.querySelectorAll('#darkModeToggle, #navDarkModeToggle');
                 toggles.forEach(toggle => {
                     toggle.querySelector('i').className = 'bi bi-sun';
                     toggle.setAttribute('data-bs-title', '{{ t("general_mode_toggle_tooltip_switch_to_light", default="Switch to light mode") | e }}');
@@ -394,7 +394,7 @@
             const isDark = !document.documentElement.classList.contains('dark-mode');
             document.documentElement.classList.toggle('dark-mode', isDark);
             localStorage.setItem('dark_mode', isDark);
-            const toggles = document.querySelectorAll('#darkModeToggle');
+            const toggles = document.querySelectorAll('#darkModeToggle, #navDarkModeToggle');
             toggles.forEach(darkModeToggle => {
                 const icon = darkModeToggle.querySelector('i');
                 icon.className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
@@ -410,13 +410,12 @@
 
         async function toggleLanguage() {
             if (window.isAuthenticatedContentBlocked) return;
-            const languageTexts = document.querySelectorAll('#languageText');
+            const languageTexts = document.querySelectorAll('#languageText, #navLanguageText');
             if (!languageTexts.length) {
                 console.error('Language text element not found.');
                 return;
             }
-            const languageText = languageTexts[0]; // Use the first instance
-            const currentLang = languageText.textContent.toLowerCase() === 'english' ? 'en' : 'ha';
+            const currentLang = languageTexts[0].textContent.toLowerCase() === 'english' ? 'en' : 'ha';
             const newLang = currentLang === 'en' ? 'ha' : 'en';
             const newLangText = newLang === 'en' ? 'ENGLISH' : 'HAUSA';
             try {
@@ -587,8 +586,8 @@
                 minutes_ago: '{{ t("general_minutes_ago", default="m ago") | e }}',
                 hours_ago: '{{ t("general_hours_ago", default="h ago") | e }}',
                 days_ago: '{{ t("general_days_ago", default="d ago") | e }}',
-                no_notifications: '{{ t("general_no_notifications", default="No notifications") | e }}',
-                check_back_later: '{{ t("general_check_back_later", default="Check back later") | e }}'
+                no_notifications: '{{ t("no_notifications", default="No notifications") | e }}',
+                check_back_later: '{{ t("check_back_later", default="Check back later") | e }}'
             };
             const now = new Date();
             const time = new Date(timestamp);
