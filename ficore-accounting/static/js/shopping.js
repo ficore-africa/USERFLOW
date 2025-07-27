@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Translation map for help text
+    // Translation map for help text and UI messages
     const helpTextTranslations = {
         'budget': "{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}",
         'quantity': "{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}",
@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'quantity_max': "{{ t('shopping_quantity_max', default='Quantity cannot exceed 1000') | e }}",
         'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}",
         'budget_required': "{{ t('shopping_budget_required', default='Budget is required') | e }}",
-        'name_required': "{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}"
+        'name_required': "{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}",
+        'item_added': "{{ t('shopping_item_added', default='Item added successfully!') | e }}"
     };
 
     // Local state for items in dashboard
@@ -153,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 form.querySelectorAll('[required]').forEach(input => {
                     if (!input.value.trim()) {
                         input.classList.add('is-invalid');
-                        input.nextElementSibling.innerText = input.id.includes('name') 
+                        input.nextElementSibling.innerText = input.id.includes('name')
                             ? helpTextTranslations['name_required']
                             : helpTextTranslations['budget_required'];
                         formIsValid = false;
@@ -227,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form QPform.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
+                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget_raw | default(0) }};
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -336,211 +337,322 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add item to frontend state (dashboard)
     document.getElementById('addItemSubmit')?.addEventListener('click', function() {
         const form = document.getElementById('addItemForm');
+        if (!form) {
+            console.error('Add item form not found');
+            return;
+        }
+
+        // Validate form
         if (!form.checkValidity()) {
             form.reportValidity();
             return;
         }
 
-        const item = {
-            id: 'temp_' + Date.now(),
-            name: document.getElementById('item_name').value.trim(),
-            quantity: parseInt(document.getElementById('item_quantity').value) || 1,
-            price: parseFloat(cleanForParse(document.getElementById('item_price').value)) || 0,
-            unit: document.getElementById('item_unit').value,
-            category: document.getElementById('item_category').value,
-            status: document.getElementById('item_status').value,
-            store: document.getElementById('item_store').value.trim(),
-            frequency: parseInt(document.getElementById('item_frequency').value) || 1
-        };
+        try {
+            const item = {
+                id: 'temp_' + Date.now(),
+                name: document.getElementById('item_name').value.trim(),
+                quantity: parseInt(document.getElementById('item_quantity').value) || 1,
+                price: parseFloat(cleanForParse(document.getElementById('item_price').value)) || 0,
+                unit: document.getElementById('item_unit').value || 'unit',
+                category: document.getElementById('item_category').value || 'general',
+                status: document.getElementById('item_status').value || 'pending',
+                store: document.getElementById('item_store').value.trim() || '',
+                frequency: parseInt(document.getElementById('item_frequency').value) || 1
+            };
 
-        const itemNames = items.map(i => i.name.toLowerCase());
-        if (itemNames.includes(item.name.toLowerCase())) {
-            document.getElementById('duplicateWarning').classList.remove('d-none');
-            return;
+            // Check for duplicate names
+            const itemNames = items.map(i => i.name.toLowerCase());
+            if (itemNames.includes(item.name.toLowerCase())) {
+                document.getElementById('duplicateWarning').classList.remove('d-none');
+                return;
+            }
+            document.getElementById('duplicateWarning')?.classList.add('d-none');
+
+            // Add item to array
+            items.push(item);
+            updateItemsTable();
+            updateBudgetProgress(form);
+            form.reset();
+
+            // Show success toast
+            const toastContainer = document.querySelector('.toast-container');
+            const toastEl = document.getElementById('itemAddedToast');
+            toastEl.classList.remove('d-none');
+            toastContainer.appendChild(toastEl);
+            new bootstrap.Toast(toastEl).show();
+
+            // Reset form validation states
+            form.querySelectorAll('.is-invalid').forEach(input => {
+                input.classList.remove('is-invalid');
+                input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+            });
+        } catch (error) {
+            console.error('Error adding item:', error);
+            const toastContainer = document.querySelector('.toast-container');
+            const toastEl = document.createElement('div');
+            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+            toastEl.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        {{ t('shopping_add_item_error', default='Failed to add item. Please try again.') | e }}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                </div>
+            `;
+            toastContainer.appendChild(toastEl);
+            new bootstrap.Toast(toastEl).show();
         }
-        document.getElementById('duplicateWarning').classList.add('d-none');
-
-        items.push(item);
-        updateItemsTable();
-        form.reset();
-        updateBudgetProgress(form);
     });
 
     // Open edit modal
     window.openEditModal = function(id, name, quantity, price, unit, category, status, store, frequency) {
-        document.getElementById('edit-item-index').value = id;
-        document.getElementById('edit-item-name').value = name;
-        document.getElementById('edit-item-quantity').value = quantity;
-        document.getElementById('edit-item-price').value = formatForDisplay(price, false);
-        document.getElementById('edit-item-unit').value = unit;
-        document.getElementById('edit-item-category').value = category;
-        document.getElementById('edit-item-status').value = status;
-        document.getElementById('edit-item-store').value = store;
-        document.getElementById('edit-item-frequency').value = frequency;
+        try {
+            document.getElementById('edit-item-index').value = id;
+            document.getElementById('edit-item-name').value = name;
+            document.getElementById('edit-item-quantity').value = quantity;
+            document.getElementById('edit-item-price').value = formatForDisplay(price, false);
+            document.getElementById('edit-item-unit').value = unit;
+            document.getElementById('edit-item-category').value = category;
+            document.getElementById('edit-item-status').value = status;
+            document.getElementById('edit-item-store').value = store;
+            document.getElementById('edit-item-frequency').value = frequency;
 
-        const modal = new bootstrap.Modal(document.getElementById('editItemModal'));
-        modal.show();
+            const modal = new bootstrap.Modal(document.getElementById('editItemModal'));
+            modal.show();
+        } catch (error) {
+            console.error('Error opening edit modal:', error);
+        }
     };
 
     // Save edited item
     document.getElementById('saveEditItem')?.addEventListener('click', function() {
         const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
-        const index = document.getElementById('edit-item-index').value;
-
-        const newItem = {
-            id: index,
-            name: document.getElementById('edit-item-name').value.trim(),
-            quantity: parseInt(document.getElementById('edit-item-quantity').value) || 1,
-            price: parseFloat(cleanForParse(document.getElementById('edit-item-price').value)) || 0,
-            unit: document.getElementById('edit-item-unit').value,
-            category: document.getElementById('edit-item-category').value,
-            status: document.getElementById('edit-item-status').value,
-            store: document.getElementById('edit-item-store').value.trim(),
-            frequency: parseInt(document.getElementById('edit-item-frequency').value) || 1
-        };
-
-        if (form.id === 'saveListForm') {
-            const itemIndex = items.findIndex(item => item.id === index);
-            if (itemIndex === -1) return;
-
-            const itemNames = items.map(i => i.name.toLowerCase()).filter((_, i) => i !== itemIndex);
-            if (itemNames.includes(newItem.name.toLowerCase())) {
-                document.getElementById('duplicateWarning').classList.remove('d-none');
-                return;
-            }
-            document.getElementById('duplicateWarning').classList.add('d-none');
-
-            items[itemIndex] = newItem;
-            updateItemsTable();
-            updateBudgetProgress(form);
-        } else {
-            const hiddenInputs = [
-                { name: `edit_item_id`, value: newItem.id },
-                { name: `edit_item_name`, value: newItem.name },
-                { name: `edit_item_quantity`, value: newItem.quantity },
-                { name: `edit_item_price`, value: newItem.price },
-                { name: `edit_item_unit`, value: newItem.unit },
-                { name: `edit_item_category`, value: newItem.category },
-                { name: `edit_item_status`, value: newItem.status },
-                { name: `edit_item_store`, value: newItem.store },
-                { name: `edit_item_frequency`, value: newItem.frequency }
-            ];
-
-            hiddenInputs.forEach(field => {
-                let input = form.querySelector(`input[name="${field.name}"]`);
-                if (!input) {
-                    input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = field.name;
-                    form.appendChild(input);
-                }
-                input.value = field.value || '';
-            });
-
-            form.submit();
+        if (!form) {
+            console.error('Form not found for saving edited item');
+            return;
         }
 
-        bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
+        try {
+            const index = document.getElementById('edit-item-index').value;
+            const newItem = {
+                id: index,
+                name: document.getElementById('edit-item-name').value.trim(),
+                quantity: parseInt(document.getElementById('edit-item-quantity').value) || 1,
+                price: parseFloat(cleanForParse(document.getElementById('edit-item-price').value)) || 0,
+                unit: document.getElementById('edit-item-unit').value || 'unit',
+                category: document.getElementById('edit-item-category').value || 'general',
+                status: document.getElementById('edit-item-status').value || 'pending',
+                store: document.getElementById('edit-item-store').value.trim() || '',
+                frequency: parseInt(document.getElementById('edit-item-frequency').value) || 1
+            };
+
+            if (form.id === 'saveListForm') {
+                const itemIndex = items.findIndex(item => item.id === index);
+                if (itemIndex === -1) {
+                    console.error('Item not found for editing:', index);
+                    return;
+                }
+
+                const itemNames = items.map(i => i.name.toLowerCase()).filter((_, i) => i !== itemIndex);
+                if (itemNames.includes(newItem.name.toLowerCase())) {
+                    document.getElementById('duplicateWarning').classList.remove('d-none');
+                    return;
+                }
+                document.getElementById('duplicateWarning')?.classList.add('d-none');
+
+                items[itemIndex] = newItem;
+                updateItemsTable();
+                updateBudgetProgress(form);
+            } else {
+                const hiddenInputs = [
+                    { name: `edit_item_id`, value: newItem.id },
+                    { name: `edit_item_name`, value: newItem.name },
+                    { name: `edit_item_quantity`, value: newItem.quantity },
+                    { name: `edit_item_price`, value: newItem.price },
+                    { name: `edit_item_unit`, value: newItem.unit },
+                    { name: `edit_item_category`, value: newItem.category },
+                    { name: `edit_item_status`, value: newItem.status },
+                    { name: `edit_item_store`, value: newItem.store },
+                    { name: `edit_item_frequency`, value: newItem.frequency }
+                ];
+
+                hiddenInputs.forEach(field => {
+                    let input = form.querySelector(`input[name="${field.name}"]`);
+                    if (!input) {
+                        input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = field.name;
+                        form.appendChild(input);
+                    }
+                    input.value = field.value || '';
+                });
+
+                form.submit();
+            }
+
+            bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
+        } catch (error) {
+            console.error('Error saving edited item:', error);
+            const toastContainer = document.querySelector('.toast-container');
+            const toastEl = document.createElement('div');
+            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+            toastEl.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        {{ t('shopping_edit_item_error', default='Failed to save item changes. Please try again.') | e }}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                </div>
+            `;
+            toastContainer.appendChild(toastEl);
+            new bootstrap.Toast(toastEl).show();
+        }
     });
 
     // Delete item from frontend state (dashboard)
     window.deleteItem = function(id) {
-        items = items.filter(item => item.id !== id);
-        updateItemsTable();
-        updateBudgetProgress(document.getElementById('saveListForm'));
+        try {
+            items = items.filter(item => item.id !== id);
+            updateItemsTable();
+            updateBudgetProgress(document.getElementById('saveListForm'));
+        } catch (error) {
+            console.error('Error deleting item:', error);
+        }
     };
 
     // Update items table (dashboard)
     function updateItemsTable() {
         const tbody = document.getElementById('items-table-body');
-        if (!tbody) return;
+        if (!tbody) {
+            console.error('Items table body not found');
+            return;
+        }
 
-        tbody.innerHTML = '';
-        items.forEach(item => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${item.name}</td>
-                <td>${item.quantity}</td>
-                <td>${formatForDisplay(item.price, false)}</td>
-                <td>{{ t('${item.unit}', default='${item.unit}') | e }}</td>
-                <td>{{ t('${item.category}', default='${item.category}') | e }}</td>
-                <td>{{ t('${item.status}', default='${item.status}') | e }}</td>
-                <td>${item.store}</td>
-                <td>${item.frequency} {{ t('general_days', default='days') | e }}</td>
-                <td>
-                    <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('${item.id}', '${item.name}', ${item.quantity}, '${formatForDisplay(item.price, false)}', '${item.unit}', '${item.category}', '${item.status}', '${item.store}', ${item.frequency})">
-                        <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
-                    </button>
-                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('${item.id}')">
-                        <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
+        try {
+            tbody.innerHTML = '';
+            items.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${escapeHtml(item.name)}</td>
+                    <td>${escapeHtml(item.quantity.toString())}</td>
+                    <td>${escapeHtml(formatForDisplay(item.price, false))}</td>
+                    <td>${escapeHtml(item.unit)}</td>
+                    <td>${escapeHtml(item.category)}</td>
+                    <td>${escapeHtml(item.status)}</td>
+                    <td>${escapeHtml(item.store || '')}</td>
+                    <td>${escapeHtml(item.frequency.toString())} {{ t('general_days', default='days') | e }}</td>
+                    <td>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('${escapeHtml(item.id)}', '${escapeHtml(item.name)}', ${item.quantity}, '${escapeHtml(formatForDisplay(item.price, false))}', '${escapeHtml(item.unit)}', '${escapeHtml(item.category)}', '${escapeHtml(item.status)}', '${escapeHtml(item.store || '')}', ${item.frequency})">
+                            <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
+                        </button>
+                        <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('${escapeHtml(item.id)}')">
+                            <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
 
-        if (items.length === 0) {
+            if (items.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="empty-state text-center">
+                            <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                            <p>{{ t('shopping_empty_list', default='Your shopping list is empty. Add items to get started!') | e }}</p>
+                        </td>
+                    </tr>
+                `;
+            }
+        } catch (error) {
+            console.error('Error updating items table:', error);
             tbody.innerHTML = `
                 <tr>
                     <td colspan="9" class="empty-state text-center">
-                        <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                        <p>{{ t('shopping_empty_list', default='Your shopping list is empty. Add items to get started!') | e }}</p>
+                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                        <p>{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}</p>
                     </td>
                 </tr>
             `;
         }
     }
 
+    // Escape HTML to prevent XSS
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return '';
+        return unsafe
+            .toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     // Calculate total cost for frontend and backend items
     function calculateFrontendTotal() {
-        return items.reduce((total, item) => {
-            return total + (item.quantity * item.price);
-        }, parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0);
+        try {
+            return items.reduce((total, item) => {
+                return total + (item.quantity * item.price);
+            }, parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0);
+        } catch (error) {
+            console.error('Error calculating frontend total:', error);
+            return 0;
+        }
     }
 
     // Calculate total cost for manage list form
     function calculateTotalCost(form) {
-        let total = 0;
-        form.querySelectorAll('.new-item-quantity').forEach((quantityInput, index) => {
-            const priceInput = form.querySelectorAll('.new-item-price')[index];
-            const nameInput = form.querySelectorAll('.new-item-name')[index];
-            if (nameInput.value.trim()) {
-                const quantity = parseInt(quantityInput.value) || 0;
-                const price = parseFloat(cleanForParse(priceInput.value)) || 0;
-                total += quantity * price;
-            }
-        });
-        return total + parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0;
+        try {
+            let total = 0;
+            form.querySelectorAll('.new-item-quantity').forEach((quantityInput, index) => {
+                const priceInput = form.querySelectorAll('.new-item-price')[index];
+                const nameInput = form.querySelectorAll('.new-item-name')[index];
+                if (nameInput.value.trim()) {
+                    const quantity = parseInt(quantityInput.value) || 0;
+                    const price = parseFloat(cleanForParse(priceInput.value)) || 0;
+                    total += quantity * price;
+                }
+            });
+            return total + parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0;
+        } catch (error) {
+            console.error('Error calculating total cost:', error);
+            return 0;
+        }
     }
 
     // Update budget progress
     function updateBudgetProgress(form) {
         if (!form) return;
-        const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-        const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
-        const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
-        if (progressBar && budget > 0) {
-            const percentage = (total / budget * 100).toFixed(2);
-            progressBar.style.width = `${percentage}%`;
-            progressBar.setAttribute('aria-valuenow', percentage);
-        }
-        const totalSpentElement = form.querySelector('#total-spent') || document.getElementById('total-spent');
-        if (totalSpentElement) {
-            totalSpentElement.textContent = formatForDisplay(total, false);
-        }
-        const remainingElement = form.querySelector('#remaining-budget') || document.getElementById('remaining-budget');
-        if (remainingElement) {
-            const remaining = budget - total;
-            remainingElement.textContent = remaining >= 0
-                ? formatForDisplay(remaining, false)
-                : `{{ t('general_over_by', default='Over by') | e }}: ${formatForDisplay(-remaining, false)}`;
+        try {
+            const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
+            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget_raw | default(0) }};
+            const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
+            if (progressBar && budget > 0) {
+                const percentage = (total / budget * 100).toFixed(2);
+                progressBar.style.width = `${percentage}%`;
+                progressBar.setAttribute('aria-valuenow', percentage);
+            }
+            const totalSpentElement = form.querySelector('#total-spent') || document.getElementById('total-spent');
+            if (totalSpentElement) {
+                totalSpentElement.textContent = formatForDisplay(total, false);
+            }
+            const remainingElement = form.querySelector('#remaining-budget') || document.getElementById('remaining-budget');
+            if (remainingElement) {
+                const remaining = budget - total;
+                remainingElement.textContent = remaining >= 0
+                    ? formatForDisplay(remaining, false)
+                    : `{{ t('general_over_by', default='Over by') | e }}: ${formatForDisplay(-remaining, false)}`;
+            }
+        } catch (error) {
+            console.error('Error updating budget progress:', error);
         }
     }
 
     // Load list details via AJAX
     window.loadListDetails = function(listId, tab) {
         if (window.isAuthenticatedContentBlocked) return;
-        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'list-details' : 'manage-list-details') || document.getElementById('dashboard-content');
+        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'dashboard-content' : 'manage-list-details') || document.getElementById('dashboard-content');
         if (!listId) {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
@@ -561,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch('{{ url_for("asdasd.personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
