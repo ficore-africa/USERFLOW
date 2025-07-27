@@ -1,252 +1,617 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Form validation and submission handling
-    const manageListForm = document.getElementById('manageListForm');
-    if (manageListForm) {
-        manageListForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const submitButton = document.getElementById('saveChangesSubmit');
-            const spinner = submitButton.querySelector('.spinner-border');
-            spinner.classList.remove('d-none');
-            submitButton.disabled = true;
+    // Translation map for help text
+    const helpTextTranslations = {
+        'budget': "{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}",
+        'quantity': "{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}",
+        'price': "{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}",
+        'frequency': "{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}",
+        'amount_max': "{{ t('shopping_amount_max', default='Input cannot exceed 10 billion') | e }}",
+        'amount_positive': "{{ t('shopping_amount_positive', default='Amount must be positive') | e }}",
+        'quantity_max': "{{ t('shopping_quantity_max', default='Quantity cannot exceed 1000') | e }}",
+        'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}"
+    };
 
-            const formData = new FormData(manageListForm);
-            formData.append('action', 'save_list_changes');
-            formData.append('list_id', document.getElementById('list_id').value);
+    // Local state for items in dashboard
+    let items = [];
 
-            fetch('/personal/shopping/main', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': getCsrfToken()
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                spinner.classList.add('d-none');
-                submitButton.disabled = false;
-                if (data.success) {
-                    window.location.href = data.redirect_url || '/personal/shopping/main?tab=manage-list&list_id=' + document.getElementById('list_id').value;
+    // Helper function to format a number for display
+    function formatForDisplay(value, isInteger) {
+        if (value === null || value === undefined || isNaN(value)) {
+            return '';
+        }
+        if (isInteger) {
+            return Math.floor(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+        return parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // Helper function to clean input for numeric parsing
+    function cleanForParse(value) {
+        if (!value) return '';
+        let clean = value.replace(/,/g, '');
+        const parts = clean.split('.');
+        if (parts.length > 2) {
+            clean = parts[0] + '.' + parts.slice(1).join('');
+        }
+        return clean;
+    }
+
+    // Apply formatting and validation to number inputs
+    function initializeNumberInputs() {
+        document.querySelectorAll('.number-input').forEach(input => {
+            const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
+            const originalHelpText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+
+            input.addEventListener('focus', function() {
+                let currentValue = input.value;
+                input.value = cleanForParse(currentValue);
+            });
+
+            input.addEventListener('blur', function() {
+                let rawValue = cleanForParse(input.value);
+                let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+
+                if (isInteger) {
+                    if ((input.id.includes('quantity') || input.classList.contains('new-item-quantity')) && numValue > 1000) {
+                        numValue = 1000;
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['quantity_max'];
+                    } else if ((input.id.includes('frequency') || input.classList.contains('new-item-frequency')) && numValue > 365) {
+                        numValue = 365;
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
+                    } else if (numValue < 0) {
+                        numValue = 0;
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                    } else {
+                        input.classList.remove('is-invalid');
+                        input.nextElementSibling.innerText = originalHelpText;
+                    }
                 } else {
-                    alert(data.error || 'An error occurred while saving changes.');
+                    if (numValue > 10000000000) {
+                        numValue = 10000000000;
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                    } else if (numValue < 0) {
+                        numValue = 0;
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                    } else {
+                        input.classList.remove('is-invalid');
+                        input.nextElementSibling.innerText = originalHelpText;
+                    }
                 }
-            })
-            .catch(error => {
-                spinner.classList.add('d-none');
-                submitButton.disabled = false;
-                console.error('Error:', error);
-                alert('An error occurred while saving changes.');
+                input.value = formatForDisplay(numValue, isInteger);
+                updateBudgetProgress(input.closest('form'));
+            });
+
+            input.addEventListener('input', function() {
+                let value = input.value;
+                let cleanedValue = isInteger ? value.replace(/[^0-9]/g, '') : value.replace(/[^0-9.]/g, '');
+                if (!isInteger) {
+                    const parts = cleanedValue.split('.');
+                    if (parts.length > 2) {
+                        cleanedValue = parts[0] + '.' + parts.slice(1).join('');
+                    }
+                }
+                if (input.value !== cleanedValue) {
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    input.value = cleanedValue;
+                    input.setSelectionRange(start, end);
+                }
+                updateBudgetProgress(input.closest('form'));
+            });
+
+            input.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pasted = (e.clipboardData || window.clipboardData).getData('text');
+                let clean = pasted.replace(/[^0-9]/g, '');
+                if (!clean) return;
+
+                let numValue = isInteger ? parseInt(clean) || 0 : parseFloat(clean) || 0;
+                if (isInteger) {
+                    if ((input.id.includes('quantity') || input.classList.contains('new-item-quantity')) && numValue > 1000) numValue = 1000;
+                    if ((input.id.includes('frequency') || input.classList.contains('new-item-frequency')) && numValue > 365) numValue = 365;
+                    input.value = numValue.toString();
+                } else {
+                    const parts = clean.split('.');
+                    if (parts.length > 2) {
+                        clean = parts[0] + '.' + parts.slice(1).join('');
+                    }
+                    if (parts.length > 1) {
+                        parts[1] = parts[1].slice(0, 2);
+                        clean = parts[0] + (parts[1] ? '.' + parts[1] : '');
+                    }
+                    input.value = clean;
+                }
+                input.dispatchEvent(new Event('blur'));
+                updateBudgetProgress(input.closest('form'));
+            });
+
+            input.dispatchEvent(new Event('blur'));
+        });
+    }
+
+    // Form validation on submit
+    function initializeFormValidation() {
+        document.querySelectorAll('.validate-form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (window.isAuthenticatedContentBlocked) {
+                    e.preventDefault();
+                    return;
+                }
+                let formIsValid = true;
+                form.querySelectorAll('.number-input').forEach(input => {
+                    const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
+                    let rawValue = cleanForParse(input.value);
+                    let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+
+                    if (isInteger) {
+                        if ((input.id.includes('quantity') || input.classList.contains('new-item-quantity')) && numValue > 1000) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations['quantity_max'];
+                            formIsValid = false;
+                        } else if ((input.id.includes('frequency') || input.classList.contains('new-item-frequency')) && numValue > 365) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
+                            formIsValid = false;
+                        } else if (numValue < 0) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                            formIsValid = false;
+                        } else {
+                            input.classList.remove('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+                        }
+                    } else {
+                        if (numValue > 10000000000 || numValue < 0) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = numValue > 10000000000 ? helpTextTranslations['amount_max'] : helpTextTranslations['amount_positive'];
+                            formIsValid = false;
+                        } else {
+                            input.classList.remove('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['price'];
+                        }
+                    }
+                    input.value = isInteger ? numValue.toString() : numValue.toFixed(2);
+                });
+
+                if (form.id === 'saveListForm' || form.id === 'manageListForm') {
+                    const itemNames = [];
+                    if (form.id === 'saveListForm') {
+                        itemNames.push(...items.map(item => item.name.trim().toLowerCase()));
+                    } else {
+                        form.querySelectorAll('input[name$="_name"]').forEach(input => {
+                            if (input.value.trim()) {
+                                itemNames.push(input.value.trim().toLowerCase());
+                            }
+                        });
+                    }
+                    const uniqueNames = new Set(itemNames);
+                    if (itemNames.length !== uniqueNames.size) {
+                        document.getElementById('duplicateWarning').classList.remove('d-none');
+                        formIsValid = false;
+                    } else {
+                        document.getElementById('duplicateWarning')?.classList.add('d-none');
+                    }
+
+                    const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
+                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
+                    if (total > budget && budget > 0) {
+                        e.preventDefault();
+                        const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
+                        modal.show();
+                        document.getElementById('proceedSubmit').onclick = function() {
+                            form.dataset.allowSubmit = 'true';
+                            form.submit();
+                        };
+                        formIsValid = false;
+                    }
+                }
+
+                if (!formIsValid && !form.dataset.allowSubmit) {
+                    e.preventDefault();
+                    const firstInvalid = form.querySelector('.is-invalid');
+                    if (firstInvalid) {
+                        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        firstInvalid.focus();
+                    }
+                    return;
+                }
+
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton && formIsValid) {
+                    submitButton.disabled = true;
+                    submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+                    submitButton.querySelector('i')?.classList.add('d-none');
+                }
+
+                if (form.id === 'saveListForm' && formIsValid) {
+                    items.forEach((item, index) => {
+                        const itemFields = ['name', 'quantity', 'price', 'unit', 'category', 'status', 'store', 'frequency'];
+                        itemFields.forEach(field => {
+                            const input = document.createElement('input');
+                            input.type = 'hidden';
+                            input.name = `items[${index}][${field}]`;
+                            input.value = item[field] || '';
+                            form.appendChild(input);
+                        });
+                    });
+                }
+
+                if (form.id === 'createListForm') {
+                    e.preventDefault();
+                    const formData = new FormData(form);
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        submitButton.disabled = false;
+                        submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                        submitButton.querySelector('i')?.classList.remove('d-none');
+
+                        if (data.success) {
+                            window.location.href = '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
+                        } else {
+                            const toastContainer = document.querySelector('.toast-container');
+                            const toastEl = document.createElement('div');
+                            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+                            toastEl.innerHTML = `
+                                <div class="d-flex">
+                                    <div class="toast-body">
+                                        ${data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}"}
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                                </div>
+                            `;
+                            toastContainer.appendChild(toastEl);
+                            new bootstrap.Toast(toastEl).show();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error creating list:', error);
+                        submitButton.disabled = false;
+                        submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                        submitButton.querySelector('i')?.classList.remove('d-none');
+
+                        const toastContainer = document.querySelector('.toast-container');
+                        const toastEl = document.createElement('div');
+                        toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+                        toastEl.innerHTML = `
+                            <div class="d-flex">
+                                <div class="toast-body">
+                                    {{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}
+                                </div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                            </div>
+                        `;
+                        toastContainer.appendChild(toastEl);
+                        new bootstrap.Toast(toastEl).show();
+                    });
+                }
             });
         });
     }
 
-    // Function to open edit modal
-    window.openEditModal = function(itemId, name, quantity, price, unit, category, status, store, frequency) {
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.id = 'editItemModal';
-        modal.innerHTML = `
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Edit Item</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="editItemForm" class="validate-form">
-                            <input type="hidden" name="action" value="save_list_changes">
-                            <input type="hidden" name="edit_item_id" value="${itemId}">
-                            <input type="hidden" name="list_id" id="list_id" value="${document.getElementById('list_id').value}">
-                            <div class="mb-3">
-                                <label for="edit_item_name" class="form-label">Item Name</label>
-                                <input type="text" name="edit_item_name" id="edit_item_name" class="form-control" value="${name}" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_quantity" class="form-label">Quantity</label>
-                                <input type="number" name="edit_item_quantity" id="edit_item_quantity" class="form-control" value="${quantity}" min="1" max="1000" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_price" class="form-label">Price</label>
-                                <input type="text" name="edit_item_price" id="edit_item_price" class="form-control number-input" value="${price}" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_unit" class="form-label">Unit</label>
-                                <select name="edit_item_unit" id="edit_item_unit" class="form-control">
-                                    <option value="piece" ${unit === 'piece' ? 'selected' : ''}>Piece</option>
-                                    <option value="carton" ${unit === 'carton' ? 'selected' : ''}>Carton</option>
-                                    <option value="kg" ${unit === 'kg' ? 'selected' : ''}>Kilogram</option>
-                                    <option value="liter" ${unit === 'liter' ? 'selected' : ''}>Liter</option>
-                                    <option value="pack" ${unit === 'pack' ? 'selected' : ''}>Pack</option>
-                                    <option value="other" ${unit === 'other' ? 'selected' : ''}>Other</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_category" class="form-label">Category</label>
-                                <select name="edit_item_category" id="edit_item_category" class="form-control">
-                                    <option value="fruits" ${category === 'fruits' ? 'selected' : ''}>Fruits</option>
-                                    <option value="vegetables" ${category === 'vegetables' ? 'selected' : ''}>Vegetables</option>
-                                    <option value="dairy" ${category === 'dairy' ? 'selected' : ''}>Dairy</option>
-                                    <option value="meat" ${category === 'meat' ? 'selected' : ''}>Meat</option>
-                                    <option value="grains" ${category === 'grains' ? 'selected' : ''}>Grains</option>
-                                    <option value="beverages" ${category === 'beverages' ? 'selected' : ''}>Beverages</option>
-                                    <option value="household" ${category === 'household' ? 'selected' : ''}>Household</option>
-                                    <option value="other" ${category === 'other' ? 'selected' : ''}>Other</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_status" class="form-label">Status</label>
-                                <select name="edit_item_status" id="edit_item_status" class="form-control">
-                                    <option value="to_buy" ${status === 'to_buy' ? 'selected' : ''}>To Buy</option>
-                                    <option value="bought" ${status === 'bought' ? 'selected' : ''}>Bought</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_store" class="form-label">Store</label>
-                                <input type="text" name="edit_item_store" id="edit_item_store" class="form-control" value="${store}">
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit_item_frequency" class="form-label">Frequency (days)</label>
-                                <input type="number" name="edit_item_frequency" id="edit_item_frequency" class="form-control" value="${frequency}" min="1" max="365" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Save Item</button>
-                        </form>
-                    </div>
+    // Add item to frontend state (dashboard)
+    document.getElementById('addItemSubmit')?.addEventListener('click', function() {
+        const form = document.getElementById('addItemForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const item = {
+            id: 'temp_' + Date.now(),
+            name: document.getElementById('item_name').value.trim(),
+            quantity: parseInt(document.getElementById('item_quantity').value) || 1,
+            price: parseFloat(cleanForParse(document.getElementById('item_price').value)) || 0,
+            unit: document.getElementById('item_unit').value,
+            category: document.getElementById('item_category').value,
+            status: document.getElementById('item_status').value,
+            store: document.getElementById('item_store').value.trim(),
+            frequency: parseInt(document.getElementById('item_frequency').value) || 1
+        };
+
+        const itemNames = items.map(i => i.name.toLowerCase());
+        if (itemNames.includes(item.name.toLowerCase())) {
+            document.getElementById('duplicateWarning').classList.remove('d-none');
+            return;
+        }
+        document.getElementById('duplicateWarning').classList.add('d-none');
+
+        items.push(item);
+        updateItemsTable();
+        form.reset();
+        updateBudgetProgress(form);
+    });
+
+    // Open edit modal
+    window.openEditModal = function(id, name, quantity, price, unit, category, status, store, frequency) {
+        document.getElementById('edit-item-index').value = id;
+        document.getElementById('edit-item-name').value = name;
+        document.getElementById('edit-item-quantity').value = quantity;
+        document.getElementById('edit-item-price').value = formatForDisplay(price, false);
+        document.getElementById('edit-item-unit').value = unit;
+        document.getElementById('edit-item-category').value = category;
+        document.getElementById('edit-item-status').value = status;
+        document.getElementById('edit-item-store').value = store;
+        document.getElementById('edit-item-frequency').value = frequency;
+
+        const modal = new bootstrap.Modal(document.getElementById('editItemModal'));
+        modal.show();
+    };
+
+    // Save edited item
+    document.getElementById('saveEditItem')?.addEventListener('click', function() {
+        const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
+        const index = document.getElementById('edit-item-index').value;
+
+        const newItem = {
+            id: index,
+            name: document.getElementById('edit-item-name').value.trim(),
+            quantity: parseInt(document.getElementById('edit-item-quantity').value) || 1,
+            price: parseFloat(cleanForParse(document.getElementById('edit-item-price').value)) || 0,
+            unit: document.getElementById('edit-item-unit').value,
+            category: document.getElementById('edit-item-category').value,
+            status: document.getElementById('edit-item-status').value,
+            store: document.getElementById('edit-item-store').value.trim(),
+            frequency: parseInt(document.getElementById('edit-item-frequency').value) || 1
+        };
+
+        if (form.id === 'saveListForm') {
+            const itemIndex = items.findIndex(item => item.id === index);
+            if (itemIndex === -1) return;
+
+            const itemNames = items.map(i => i.name.toLowerCase()).filter((_, i) => i !== itemIndex);
+            if (itemNames.includes(newItem.name.toLowerCase())) {
+                document.getElementById('duplicateWarning').classList.remove('d-none');
+                return;
+            }
+            document.getElementById('duplicateWarning').classList.add('d-none');
+
+            items[itemIndex] = newItem;
+            updateItemsTable();
+            updateBudgetProgress(form);
+        } else {
+            const hiddenInputs = [
+                { name: `edit_item_id`, value: newItem.id },
+                { name: `edit_item_name`, value: newItem.name },
+                { name: `edit_item_quantity`, value: newItem.quantity },
+                { name: `edit_item_price`, value: newItem.price },
+                { name: `edit_item_unit`, value: newItem.unit },
+                { name: `edit_item_category`, value: newItem.category },
+                { name: `edit_item_status`, value: newItem.status },
+                { name: `edit_item_store`, value: newItem.store },
+                { name: `edit_item_frequency`, value: newItem.frequency }
+            ];
+
+            hiddenInputs.forEach(field => {
+                let input = form.querySelector(`input[name="${field.name}"]`);
+                if (!input) {
+                    input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = field.name;
+                    form.appendChild(input);
+                }
+                input.value = field.value || '';
+            });
+
+            form.submit();
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
+    });
+
+    // Delete item from frontend state (dashboard)
+    window.deleteItem = function(id) {
+        items = items.filter(item => item.id !== id);
+        updateItemsTable();
+        updateBudgetProgress(document.getElementById('saveListForm'));
+    };
+
+    // Update items table (dashboard)
+    function updateItemsTable() {
+        const tbody = document.getElementById('items-table-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        items.forEach(item => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${item.name}</td>
+                <td>${item.quantity}</td>
+                <td>${formatForDisplay(item.price, false)}</td>
+                <td>{{ t('${item.unit}', default='${item.unit}') | e }}</td>
+                <td>{{ t('${item.category}', default='${item.category}') | e }}</td>
+                <td>{{ t('${item.status}', default='${item.status}') | e }}</td>
+                <td>${item.store}</td>
+                <td>${item.frequency} {{ t('general_days', default='days') | e }}</td>
+                <td>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('${item.id}', '${item.name}', ${item.quantity}, '${formatForDisplay(item.price, false)}', '${item.unit}', '${item.category}', '${item.status}', '${item.store}', ${item.frequency})">
+                        <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('${item.id}')">
+                        <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        if (items.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="empty-state text-center">
+                        <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                        <p>{{ t('shopping_empty_list', default='Your shopping list is empty. Add items to get started!') | e }}</p>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    // Calculate total cost for frontend and backend items
+    function calculateFrontendTotal() {
+        return items.reduce((total, item) => {
+            return total + (item.quantity * item.price);
+        }, parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0);
+    }
+
+    // Calculate total cost for manage list form
+    function calculateTotalCost(form) {
+        let total = 0;
+        form.querySelectorAll('.new-item-quantity').forEach((quantityInput, index) => {
+            const priceInput = form.querySelectorAll('.new-item-price')[index];
+            const nameInput = form.querySelectorAll('.new-item-name')[index];
+            if (nameInput.value.trim()) {
+                const quantity = parseInt(quantityInput.value) || 0;
+                const price = parseFloat(cleanForParse(priceInput.value)) || 0;
+                total += quantity * price;
+            }
+        });
+        return total + parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0;
+    }
+
+    // Update budget progress
+    function updateBudgetProgress(form) {
+        if (!form) return;
+        const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
+        const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
+        const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
+        if (progressBar && budget > 0) {
+            const percentage = (total / budget * 100).toFixed(2);
+            progressBar.style.width = `${percentage}%`;
+            progressBar.setAttribute('aria-valuenow', percentage);
+        }
+        const totalSpentElement = form.querySelector('#total-spent') || document.getElementById('total-spent');
+        if (totalSpentElement) {
+            totalSpentElement.textContent = formatForDisplay(total, false);
+        }
+        const remainingElement = form.querySelector('#remaining-budget') || document.getElementById('remaining-budget');
+        if (remainingElement) {
+            const remaining = budget - total;
+            remainingElement.textContent = remaining >= 0
+                ? formatForDisplay(remaining, false)
+                : `{{ t('general_over_by', default='Over by') | e }}: ${formatForDisplay(-remaining, false)}`;
+        }
+    }
+
+    // Load list details via AJAX
+    window.loadListDetails = function(listId, tab) {
+        if (window.isAuthenticatedContentBlocked) return;
+        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'list-details' : 'manage-list-details') || document.getElementById('dashboard-content');
+        if (!listId) {
+            detailsDiv.innerHTML = `
+                <div class="empty-state text-center">
+                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                    <p>{{ t('shopping_no_list_selected', default='No list selected. Please select a list to manage.') | e }}</p>
+                </div>
+            `;
+            if (tab === 'dashboard') items = [];
+            updateItemsTable();
+            return;
+        }
+
+        detailsDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
                 </div>
             </div>
         `;
-        document.body.appendChild(modal);
-        const bootstrapModal = new bootstrap.Modal(modal);
-        bootstrapModal.show();
-        modal.addEventListener('hidden.bs.modal', function() {
-            modal.remove();
-        });
 
-        const editItemForm = document.getElementById('editItemForm');
-        editItemForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const formData = new FormData(editItemForm);
-            formData.append('action', 'save_list_changes');
-            formData.append('list_id', document.getElementById('list_id').value);
-
-            fetch('/personal/shopping/main', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': getCsrfToken()
+        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.html) {
+                detailsDiv.innerHTML = data.html;
+                if (tab === 'dashboard') {
+                    items = data.items || [];
+                    updateItemsTable();
                 }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    bootstrapModal.hide();
-                    window.location.href = '/personal/shopping/main?tab=manage-list&list_id=' + document.getElementById('list_id').value;
-                } else {
-                    alert(data.error || 'An error occurred while saving item.');
+                initializeNumberInputs();
+                initializeFormValidation();
+                updateBudgetProgress(document.getElementById(tab === 'dashboard' ? 'saveListForm' : 'manageListForm'));
+            } else {
+                detailsDiv.innerHTML = `
+                    <div class="empty-state text-center">
+                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                        <p>${data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}"}</p>
+                    </div>
+                `;
+                if (tab === 'dashboard') {
+                    items = [];
+                    updateItemsTable();
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while saving item.');
-            });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading list details:', error);
+            detailsDiv.innerHTML = `
+                <div class="empty-state text-center">
+                    <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
+                    <p>{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}</p>
+                </div>
+            `;
+            if (tab === 'dashboard') {
+                items = [];
+                updateItemsTable();
+            }
         });
     };
 
-    // Function to fetch list details
-    function fetchListDetails() {
-        const listId = document.getElementById('list_id').value;
-        if (!listId) return;
-
-        fetch(`/personal/shopping/get_list_details?list_id=${listId}`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': getCsrfToken()
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.querySelector('.card-body').innerHTML = data.html;
-            } else {
-                alert(data.error || 'Failed to load list details.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while fetching list details.');
-        });
-    }
-
-    // Support for save_list action
-    const saveListButton = document.createElement('button');
-    saveListButton.className = 'btn btn-primary';
-    saveListButton.id = 'saveListButton';
-    saveListButton.innerHTML = '<i class="fa-solid fa-save"></i> Save List';
-    document.querySelector('.mt-3').appendChild(saveListButton);
-
-    saveListButton.addEventListener('click', function() {
-        const formData = new FormData();
-        formData.append('action', 'save_list');
-        formData.append('list_id', document.getElementById('list_id').value);
-
-        // Collect items dynamically
-        const items = [];
-        document.querySelectorAll('.row.mb-3').forEach(row => {
-            const name = row.querySelector('.new-item-name').value;
-            if (name) {
-                items.push({
-                    name: name,
-                    quantity: row.querySelector('.new-item-quantity').value || 1,
-                    price: row.querySelector('.new-item-price').value || '0',
-                    unit: row.querySelector('select[name$="unit"]').value || 'piece',
-                    category: row.querySelector('select[name$="category"]').value || 'other',
-                    status: row.querySelector('select[name$="status"]').value || 'to_buy',
-                    store: row.querySelector('input[name$="store"]').value || 'Unknown',
-                    frequency: row.querySelector('.new-item-frequency').value || 7
-                });
-            }
-        });
-
-        items.forEach((item, index) => {
-            formData.append(`items[${index}][name]`, item.name);
-            formData.append(`items[${index}][quantity]`, item.quantity);
-            formData.append(`items[${index}][price]`, item.price);
-            formData.append(`items[${index}][unit]`, item.unit);
-            formData.append(`items[${index}][category]`, item.category);
-            formData.append(`items[${index}][status]`, item.status);
-            formData.append(`items[${index}][store]`, item.store);
-            formData.append(`items[${index}][frequency]`, item.frequency);
-        });
-
-        fetch('/personal/shopping/main', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': getCsrfToken()
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = data.redirect_url || '/personal/shopping/main?tab=dashboard&list_id=' + document.getElementById('list_id').value;
-            } else {
-                alert(data.error || 'An error occurred while saving the list.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while saving the list.');
-        });
+    // Initialize tooltips
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(tooltipTriggerEl => {
+        new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
-    // CSRF token retrieval function
-    function getCsrfToken() {
-        const token = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (!token) {
-            console.error('CSRF token not found in meta tag');
-        }
-        return token || '';
+    // Show toasts
+    document.querySelectorAll('.toast').forEach(toast => {
+        new bootstrap.Toast(toast).show();
+    });
+
+    // Initialize budget progress and items table
+    updateItemsTable();
+    initializeNumberInputs();
+    initializeFormValidation();
+
+    // Trigger load if a list is pre-selected
+    const dashboardSelect = document.getElementById('dashboard-list-select') || document.getElementById('list-select');
+    const manageSelect = document.getElementById('manage-list-select');
+    if (dashboardSelect?.value) {
+        loadListDetails(dashboardSelect.value, 'dashboard');
+    } else if (manageSelect?.value) {
+        loadListDetails(manageSelect.value, 'manage-list');
     }
+
+    // Tab persistence with sessionStorage
+    const activeTab = document.querySelector('.nav-link.active')?.id.replace('-tab', '');
+    if (activeTab) {
+        sessionStorage.setItem('activeShoppingTab', activeTab);
+    }
+
+    // Re-enable buttons on page load
+    document.querySelectorAll('button[type="submit"]').forEach(button => {
+        button.disabled = false;
+        button.querySelector('.spinner-border')?.classList.add('d-none');
+        button.querySelector('i')?.classList.remove('d-none');
+    });
 });
