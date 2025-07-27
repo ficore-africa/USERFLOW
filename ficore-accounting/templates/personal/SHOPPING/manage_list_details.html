@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block page_scripts %}
-    <script src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
+    <script defer src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
 {% endblock %}
 
 {% block content %}
