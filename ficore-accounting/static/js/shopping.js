@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'item_added': "{{ t('shopping_item_added', default='Item added successfully!') | e }}",
         'add_item_error': "{{ t('shopping_add_item_error', default='Failed to add item. Please try again.') | e }}",
         'edit_item_error': "{{ t('shopping_edit_item_error', default='Failed to save item changes. Please try again.') | e }}",
-        'table_error': "{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}"
+        'table_error': "{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}",
+        'duplicate_item_name': "{{ t('shopping_duplicate_item_name', default='Item name already exists in this list.') | e }}"
     };
 
     // Local state for items in dashboard
@@ -241,6 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const uniqueNames = new Set(itemNames);
                     if (itemNames.length !== uniqueNames.size) {
                         document.getElementById('duplicateWarning').classList.remove('d-none');
+                        showToast(helpTextTranslations['duplicate_item_name'], 'danger');
                         formIsValid = false;
                     } else {
                         document.getElementById('duplicateWarning')?.classList.add('d-none');
@@ -384,6 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check for duplicate names
             const itemNames = items.map(i => i.name.toLowerCase());
             if (itemNames.includes(item.name.toLowerCase())) {
+                showToast(helpTextTranslations['duplicate_item_name'], 'danger');
                 document.getElementById('duplicateWarning').classList.remove('d-none');
                 return;
             }
@@ -465,6 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const itemNames = items.map(i => i.name.toLowerCase()).filter((_, i) => i !== itemIndex);
                 if (itemNames.includes(newItem.name.toLowerCase())) {
+                    showToast(helpTextTranslations['duplicate_item_name'], 'danger');
                     document.getElementById('duplicateWarning').classList.remove('d-none');
                     return;
                 }
