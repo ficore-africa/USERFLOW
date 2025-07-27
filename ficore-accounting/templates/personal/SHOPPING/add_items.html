@@ -96,6 +96,7 @@
                     <div class="mb-3">
                         <label for="edit-item-name" class="form-label">{{ t('general_item_name', default='Item Name') | e }}</label>
                         <input type="text" id="edit-item-name" class="form-control" required>
+                        <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
                     </div>
                     <div class="mb-3">
                         <label for="edit-item-quantity" class="form-label">{{ t('general_quantity', default='Quantity') | e }}</label>
@@ -153,6 +154,16 @@
     <div id="duplicateWarning" class="alert alert-warning alert-dismissible fade d-none" role="alert">
         {{ t('shopping_duplicate_item', default='Duplicate item name detected. Please use unique item names.') | e }}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+    </div>
+
+    <!-- Success Toast for Item Addition -->
+    <div id="itemAddedToast" class="toast align-items-center text-white bg-success border-0 d-none" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                {{ t('shopping_item_added', default='Item added successfully!') | e }}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+        </div>
     </div>
 
     <ul class="nav nav-tabs mb-4" id="shoppingTabs" role="tablist">
