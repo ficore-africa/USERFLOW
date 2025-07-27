@@ -20,6 +20,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Local state for items in dashboard
     let items = [];
 
+    // Helper function to show toasts
+    function showToast(message, type = 'danger') {
+        const toastContainer = document.querySelector('.toast-container');
+        if (!toastContainer) return;
+        const toastEl = document.createElement('div');
+        toastEl.className = `toast align-items-center text-white bg-${type} border-0`;
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+            </div>
+        `;
+        toastContainer.appendChild(toastEl);
+        new bootstrap.Toast(toastEl).show();
+    }
+
     // Helper function to format a number for display
     function formatForDisplay(value, isInteger) {
         if (value === null || value === undefined || isNaN(value)) {
@@ -277,60 +293,61 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (form.id === 'createListForm') {
                     e.preventDefault();
                     const formData = new FormData(form);
+                    const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
+                    const submitButton = form.querySelector('#createListSubmit');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
+                        submitButton.querySelector('i')?.classList.add('d-none');
+                    }
                     fetch(form.action, {
                         method: 'POST',
                         body: formData,
                         headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-Token': csrfToken || ''
                         }
                     })
-                    .then(response => {
-                        if (!response.ok) throw new Error('Server error');
-                        return response.json();
-                    })
+                    .then(response => response.json())
                     .then(data => {
-                        submitButton.disabled = false;
-                        submitButton.querySelector('.spinner-border')?.classList.add('d-none');
-                        submitButton.querySelector('i')?.classList.remove('d-none');
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                            submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                            submitButton.querySelector('i')?.classList.remove('d-none');
+                        }
                         if (data.success) {
                             window.location.href = data.redirect_url || '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
                         } else {
-                            const toastContainer = document.querySelector('.toast-container');
-                            const toastEl = document.createElement('div');
-                            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
                             let errorMsg = data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}";
                             if (data.errors) {
-                                const fieldErrors = Object.values(data.errors).flat().join('; ');
-                                errorMsg = fieldErrors || errorMsg;
+                                Object.keys(data.errors).forEach(field => {
+                                    const input = form.querySelector(`[name="${field}"]`);
+                                    if (input) {
+                                        input.classList.add('is-invalid');
+                                        const feedback = input.nextElementSibling;
+                                        if (feedback && feedback.classList.contains('invalid-feedback')) {
+                                            feedback.innerText = data.errors[field].join(', ');
+                                        }
+                                    }
+                                });
+                                errorMsg = Object.values(data.errors).flat().join('; ') || errorMsg;
                             }
-                            toastEl.innerHTML = `
-                                <div class="d-flex">
-                                    <div class="toast-body">${errorMsg}</div>
-                                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
-                                </div>
-                            `;
-                            toastContainer.appendChild(toastEl);
-                            new bootstrap.Toast(toastEl).show();
+                            showToast(errorMsg, 'danger');
+                            const firstInvalid = form.querySelector('.is-invalid');
+                            if (firstInvalid) {
+                                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                firstInvalid.focus();
+                            }
                         }
                     })
                     .catch(error => {
                         console.error('Error creating list:', error);
-                        submitButton.disabled = false;
-                        submitButton.querySelector('.spinner-border')?.classList.add('d-none');
-                        submitButton.querySelector('i')?.classList.remove('d-none');
-                        const toastContainer = document.querySelector('.toast-container');
-                        const toastEl = document.createElement('div');
-                        toastEl.className = 'toast align-items-center text-white bg-danger border-0';
-                        toastEl.innerHTML = `
-                            <div class="d-flex">
-                                <div class="toast-body">
-                                    {{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}
-                                </div>
-                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
-                            </div>
-                        `;
-                        toastContainer.appendChild(toastEl);
-                        new bootstrap.Toast(toastEl).show();
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                            submitButton.querySelector('.spinner-border')?.classList.add('d-none');
+                            submitButton.querySelector('i')?.classList.remove('d-none');
+                        }
+                        showToast("{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}", 'danger');
                     });
                 }
             });
@@ -379,11 +396,9 @@ document.addEventListener('DOMContentLoaded', function() {
             form.reset();
 
             // Show success toast
-            const toastContainer = document.querySelector('.toast-container');
             const toastEl = document.getElementById('itemAddedToast');
             toastEl.classList.remove('d-none');
-            toastContainer.appendChild(toastEl);
-            new bootstrap.Toast(toastEl).show();
+            showToast(helpTextTranslations['item_added'], 'success');
 
             // Reset form validation states
             form.querySelectorAll('.is-invalid').forEach(input => {
@@ -392,19 +407,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         } catch (error) {
             console.error('Error adding item:', error);
-            const toastContainer = document.querySelector('.toast-container');
-            const toastEl = document.createElement('div');
-            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
-            toastEl.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">
-                        ${helpTextTranslations['add_item_error']}
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
-                </div>
-            `;
-            toastContainer.appendChild(toastEl);
-            new bootstrap.Toast(toastEl).show();
+            showToast(helpTextTranslations['add_item_error'], 'danger');
         }
     });
 
@@ -425,6 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
             modal.show();
         } catch (error) {
             console.error('Error opening edit modal:', error);
+            showToast("{{ t('shopping_edit_modal_error', default='Failed to open edit modal. Please try again.') | e }}", 'danger');
         }
     };
 
@@ -433,6 +437,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
         if (!form) {
             console.error('Form not found for saving edited item');
+            showToast("{{ t('shopping_form_error', default='Form not found. Please try again.') | e }}", 'danger');
             return;
         }
 
@@ -454,6 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const itemIndex = items.findIndex(item => item.id === index);
                 if (itemIndex === -1) {
                     console.error('Item not found for editing:', index);
+                    showToast("{{ t('shopping_item_not_found', default='Item not found. Please try again.') | e }}", 'danger');
                     return;
                 }
 
@@ -497,19 +503,7 @@ document.addEventListener('DOMContentLoaded', function() {
             bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
         } catch (error) {
             console.error('Error saving edited item:', error);
-            const toastContainer = document.querySelector('.toast-container');
-            const toastEl = document.createElement('div');
-            toastEl.className = 'toast align-items-center text-white bg-danger border-0';
-            toastEl.innerHTML = `
-                <div class="d-flex">
-                    <div class="toast-body">
-                        ${helpTextTranslations['edit_item_error']}
-                    </div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
-                </div>
-            `;
-            toastContainer.appendChild(toastEl);
-            new bootstrap.Toast(toastEl).show();
+            showToast(helpTextTranslations['edit_item_error'], 'danger');
         }
     });
 
@@ -533,6 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error deleting item:', error);
+            showToast("{{ t('shopping_delete_item_error', default='Failed to delete item. Please try again.') | e }}", 'danger');
         }
     };
 
@@ -673,6 +668,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                     <p>{{ t('shopping_no_list_selected', default='No list selected. Please select a list to manage.') | e }}</p>
+                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                    </a>
                 </div>
             `;
             if (tab === 'dashboard') items = [];
@@ -710,17 +708,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 initializeNumberInputs();
                 initializeFormValidation();
                 updateBudgetProgress(document.getElementById(tab === 'dashboard' ? 'saveListForm' : 'manageListForm'));
+                document.querySelectorAll('.toast').forEach(toast => {
+                    new bootstrap.Toast(toast).show();
+                });
             } else {
                 detailsDiv.innerHTML = `
                     <div class="empty-state text-center">
                         <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
                         <p>${data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}"}</p>
+                        <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                            <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                        </a>
                     </div>
                 `;
                 if (tab === 'dashboard') {
                     items = [];
                     updateItemsTable();
                 }
+                showToast(data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}", 'danger');
             }
         })
         .catch(error => {
@@ -729,12 +734,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
                     <p>{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}</p>
+                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                    </a>
                 </div>
             `;
             if (tab === 'dashboard') {
                 items = [];
                 updateItemsTable();
             }
+            showToast("{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}", 'danger');
         });
     };
 
@@ -754,12 +763,15 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeFormValidation();
 
     // Trigger load if a list is pre-selected
-    const dashboardSelect = document.getElementById('dashboard-list-select') || document.getElementById('list-select');
+    const dashboardSelect = document.getElementById('dashboard-list-select');
     const manageSelect = document.getElementById('manage-list-select');
     if (dashboardSelect?.value) {
         loadListDetails(dashboardSelect.value, 'dashboard');
     } else if (manageSelect?.value) {
         loadListDetails(manageSelect.value, 'manage-list');
+    } else if (dashboardSelect) {
+        // If no list is pre-selected, ensure empty state is shown
+        loadListDetails('', 'dashboard');
     }
 
     // Tab persistence with sessionStorage
