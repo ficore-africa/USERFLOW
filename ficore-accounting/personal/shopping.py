@@ -228,16 +228,24 @@ class ShareListForm(FlaskForm):
 @custom_login_required
 @requires_role(['personal', 'admin'])
 def main():
+    # Ensure session persistence for anonymous users
     if 'sid' not in session:
         create_anonymous_session()
         session['is_anonymous'] = True
         logger.debug(f"New session created with sid: {session['sid']}")
     session.permanent = True
     session.modified = True
+
     list_form = ShoppingListForm()
     item_form = ShoppingItemForm()
     share_form = ShareListForm()
     db = get_mongo_db()
+
+    # Check credits before rendering create-list tab
+    if request.args.get('tab', 'create-list') == 'create-list' and current_user.is_authenticated and not is_admin():
+        if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
+            flash(trans('shopping_insufficient_credits', default='Insufficient credits to create a list. Please add credits.'), 'danger')
+            return redirect(url_for('dashboard.index'))
 
     valid_tabs = ['create-list', 'add-items', 'view-lists', 'manage-list']
     active_tab = request.args.get('tab', 'create-list')
@@ -245,10 +253,29 @@ def main():
         active_tab = 'create-list'
 
     filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
-    lists = []
-    selected_list = None
+    lists = {str(lst['_id']): lst for lst in db.shopping_lists.find(filter_criteria).sort('created_at', -1)}
+    
+    # Preselect most recent list if none selected
+    selected_list_id = request.args.get('list_id') or session.get('selected_list_id')
+    if not selected_list_id and lists:
+        selected_list_id = list(lists.keys())[0]
+        session['selected_list_id'] = selected_list_id
+
+    selected_list = lists.get(selected_list_id, {})
+    items = list(db.shopping_items.find({'list_id': selected_list_id})) if selected_list_id else []
     categories = {}
-    items = []
+    if selected_list_id:
+        categories = {
+            trans('shopping_category_fruits', default='Fruits'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'fruits'),
+            trans('shopping_category_vegetables', default='Vegetables'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
+            trans('shopping_category_dairy', default='Dairy'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'dairy'),
+            trans('shopping_category_meat', default='Meat'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'meat'),
+            trans('shopping_category_grains', default='Grains'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'grains'),
+            trans('shopping_category_beverages', default='Beverages'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'beverages'),
+            trans('shopping_category_household', default='Household'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'household'),
+            trans('shopping_category_other', default='Other'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'other')
+        }
+        categories = {k: v for k, v in categories.items() if v > 0}
 
     try:
         log_tool_usage(
@@ -278,8 +305,8 @@ def main():
                     '_id': ObjectId(),
                     'name': list_form.name.data,
                     'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                    'session_id': session['sid'],
-                    'budget': list_form.budget.data,
+                    'session_id': session['sid'] if not current_user.is_authenticated else None,
+                    'budget': float(clean_currency(list_form.budget.data)),
                     'created_at': datetime.utcnow(),
                     'updated_at': datetime.utcnow(),
                     'collaborators': [],
@@ -301,46 +328,50 @@ def main():
                                         }), 500
                                     flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits.'), 'danger')
                                     return redirect(url_for('personal.shopping.main', tab='create-list'))
-                    session['selected_list_id'] = str(list_data['_id'])  # Set for pre-selection
+                    session['selected_list_id'] = str(list_data['_id'])
                     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                         return jsonify({
                             'success': True,
                             'redirect_url': url_for('personal.shopping.main', tab='add-items', list_id=str(list_data['_id']))
                         })
-                    flash(trans('shopping_list_created', default='List created successfully!'), 'success')
+                    flash(trans('shopping_list_created', default='Shopping list created successfully!'), 'success')
                     return redirect(url_for('personal.shopping.main', tab='add-items', list_id=str(list_data['_id'])))
                 except Exception as e:
-                    logger.error(f"Failed to save list {list_data['_id']}: {str(e)}")
+                    logger.error(f"Failed to save list {list_data['_id']}: {str(e)}", exc_info=True)
                     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                         return jsonify({
                             'success': False,
-                            'error': trans('shopping_list_error', default='Error saving list.')
+                            'error': trans('shopping_list_error', default=f'Error saving list: {str(e)}')
                         }), 500
-                    flash(trans('shopping_list_error', default='Error saving list.'), 'danger')
+                    flash(trans('shopping_list_error', default=f'Error saving list: {str(e)}'), 'danger')
                     return redirect(url_for('personal.shopping.main', tab='create-list'))
             else:
-                # Form validation failed
-                errors = {}
-                for field, field_errors in list_form.errors.items():
-                    errors[field] = [trans(error, default=error) for error in field_errors]
+                errors = {field: [trans(error, default=error) for error in field_errors] for field, field_errors in list_form.errors.items()}
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({
                         'success': False,
                         'error': trans('shopping_form_invalid', default='Invalid form data.'),
                         'errors': errors
                     }), 400
-                flash(trans('shopping_form_invalid', default='Invalid form data.'), 'danger')
+                for field, field_errors in list_form.errors.items():
+                    for error in field_errors:
+                        flash(f"{field.capitalize()}: {trans(error, default=error)}", 'danger')
                 return render_template(
                     'personal/SHOPPING/create_list.html',
                     list_form=list_form,
                     item_form=item_form,
                     share_form=share_form,
-                    lists={},
-                    selected_list=None,
-                    selected_list_id=None,
-                    items=[],
-                    categories={},
-                    tips=[],
+                    lists=lists,
+                    selected_list=selected_list,
+                    selected_list_id=selected_list_id,
+                    items=items,
+                    categories=categories,
+                    tips=[
+                        trans('shopping_tip_plan_ahead', default='Plan your shopping list ahead to avoid impulse buys.'),
+                        trans('shopping_tip_compare_prices', default='Compare prices across stores to save money.'),
+                        trans('shopping_tip_bulk_buy', default='Buy non-perishable items in bulk to reduce costs.'),
+                        trans('shopping_tip_check_sales', default='Check for sales or discounts before shopping.')
+                    ],
                     insights=[],
                     tool_title=trans('shopping_title', default='Shopping List Planner'),
                     active_tab='create-list',
@@ -424,7 +455,6 @@ def main():
             try:
                 with db.client.start_session() as mongo_session:
                     with mongo_session.start_transaction():
-                        # Process items from form
                         index = 0
                         while f'items[{index}][name]' in request.form:
                             new_name = request.form.get(f'items[{index}][name]', '').strip()
@@ -432,8 +462,6 @@ def main():
                                 index += 1
                                 continue
                             try:
-                                new_quantity間に
-
                                 new_quantity = int(request.form.get(f'items[{index}][quantity]', 1))
                                 new_price = float(clean_currency(request.form.get(f'items[{index}][price]', '0')))
                                 new_unit = request.form.get(f'items[{index}][unit]', 'piece')
@@ -532,7 +560,6 @@ def main():
                             if not deduct_ficore_credits(db, current_user.id, 0.5, 'delete_shopping_list', list_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for deletion.'), 'danger')
                                 return redirect(url_for('personal.shopping.main', tab='view-lists'))
-                # Clear selected_list_id if deleted
                 if session.get('selected_list_id') == list_id:
                     session.pop('selected_list_id', None)
                 flash(trans('shopping_list_deleted', default='List deleted successfully!'), 'success')
@@ -541,9 +568,8 @@ def main():
                 flash(trans('shopping_list_error', default='Error deleting list.'), 'danger')
             return redirect(url_for('personal.shopping.main', tab='view-lists'))
 
-    lists = list(db.shopping_lists.find(filter_criteria).sort('created_at', -1))
     lists_dict = {}
-    for lst in lists:
+    for lst in lists.values():
         list_items = list(db.shopping_items.find({'list_id': str(lst['_id'])}))
         list_data = {
             'id': str(lst['_id']),
@@ -570,30 +596,8 @@ def main():
         }
         lists_dict[list_data['id']] = list_data
 
-    # Use session['selected_list_id'] if no list_id in query args
-    selected_list_id = request.args.get('list_id') or session.get('selected_list_id')
-    if selected_list_id and ObjectId.is_valid(selected_list_id):
-        selected_list = lists_dict.get(selected_list_id)
-        if selected_list:
-            items = selected_list['items']
-            categories = {
-                trans('shopping_category_fruits', default='Fruits'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'fruits'),
-                trans('shopping_category_vegetables', default='Vegetables'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
-                trans('shopping_category_dairy', default='Dairy'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'dairy'),
-                trans('shopping_category_meat', default='Meat'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'meat'),
-                trans('shopping_category_grains', default='Grains'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'grains'),
-                trans('shopping_category_beverages', default='Beverages'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'beverages'),
-                trans('shopping_category_household', default='Household'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'household'),
-                trans('shopping_category_other', default='Other'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'other')
-            }
-            categories = {k: v for k, v in categories.items() if v > 0}
-
-    tips = [
-        trans('shopping_tip_plan_ahead', default='Plan your shopping list ahead to avoid impulse buys.'),
-        trans('shopping_tip_compare_prices', default='Compare prices across stores to save money.'),
-        trans('shopping_tip_bulk_buy', default='Buy non-perishable items in bulk to reduce costs.'),
-        trans('shopping_tip_check_sales', default='Check for sales or discounts before shopping.')
-    ]
+    selected_list = lists_dict.get(selected_list_id, {}) if selected_list_id else {}
+    items = selected_list.get('items', []) if selected_list else []
     insights = []
     if selected_list and selected_list['budget_raw'] > 0:
         if selected_list['total_spent_raw'] > selected_list['budget_raw']:
@@ -618,7 +622,12 @@ def main():
         selected_list_id=selected_list_id,
         items=items,
         categories=categories,
-        tips=tips,
+        tips=[
+            trans('shopping_tip_plan_ahead', default='Plan your shopping list ahead to avoid impulse buys.'),
+            trans('shopping_tip_compare_prices', default='Compare prices across stores to save money.'),
+            trans('shopping_tip_bulk_buy', default='Buy non-perishable items in bulk to reduce costs.'),
+            trans('shopping_tip_check_sales', default='Check for sales or discounts before shopping.')
+        ],
         insights=insights,
         tool_title=trans('shopping_title', default='Shopping List Planner'),
         active_tab=active_tab,
@@ -654,7 +663,7 @@ def get_list_details():
         'collaborators': shopping_list.get('collaborators', []),
         'items': [{
             'id': str(item['_id']),
-            'name': item.option('name'),
+            'name': item.get('name'),
             'quantity': item.get('quantity', 1),
             'price': float(item.get('price', 0.0)),
             'unit': item.get('unit', 'piece'),
@@ -709,7 +718,6 @@ def manage_list(list_id):
                 except ValueError:
                     flash(trans('shopping_budget_invalid', default='Invalid budget value.'), 'danger')
                     return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
-                # Check for duplicate item names
                 item_names = [request.form.get(f'new_item_name_{i}', '').strip().lower() for i in range(1, 6) if request.form.get(f'new_item_name_{i}', '').strip()]
                 if len(item_names) != len(set(item_names)):
                     flash(trans('shopping_duplicate_item', default='Duplicate item name detected. Please use unique item names.'), 'warning')
@@ -719,13 +727,11 @@ def manage_list(list_id):
                 deleted = 0
                 with db.client.start_session() as mongo_session:
                     with mongo_session.start_transaction():
-                        # Handle item deletion
                         if request.form.get('item_id'):
                             item_id = request.form.get('item_id')
                             if ObjectId.is_valid(item_id):
                                 db.shopping_items.delete_one({'_id': ObjectId(item_id), 'list_id': list_id}, session=mongo_session)
                                 deleted += 1
-                        # Handle item editing
                         if request.form.get('edit_item_id'):
                             item_id = request.form.get('edit_item_id')
                             if ObjectId.is_valid(item_id):
@@ -749,7 +755,6 @@ def manage_list(list_id):
                                     session=mongo_session
                                 )
                                 edited += 1
-                        # Handle new items
                         for i in range(1, 6):
                             new_name = request.form.get(f'new_item_name_{i}', '').strip()
                             if new_name:
@@ -784,7 +789,6 @@ def manage_list(list_id):
                                     added += 1
                                 except ValueError as e:
                                     flash(trans('shopping_item_error', default='Error adding new item: ') + str(e), 'danger')
-                        # Update list
                         items = list(db.shopping_items.find({'list_id': list_id}, session=mongo_session))
                         total_spent = sum(item['price'] * item['quantity'] for item in items)
                         db.shopping_lists.update_one(
@@ -823,7 +827,7 @@ def manage_list(list_id):
                         if current_user.is_authenticated and not is_admin():
                             if not deduct_ficore_credits(db, current_user.id, 0.1, 'delete_shopping_item', item_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item deletion.'), 'danger')
-                                return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
+                                return redirect(url_for('personal.shopping.main', tab='manage-list', link_id=list_id))
                 flash(trans('shopping_item_deleted', default='Item deleted successfully!'), 'success')
                 return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
 
@@ -1054,6 +1058,7 @@ def handle_csrf_error(e):
 
 def init_app(app):
     try:
+        csrf.init_app(app)  # Initialize CSRFProtect
         db = get_mongo_db()
         db.shopping_lists.create_index([('user_id', 1), ('status', 1), ('updated_at', -1)])
         db.shopping_items.create_index([('list_id', 1), ('created_at', -1)])
