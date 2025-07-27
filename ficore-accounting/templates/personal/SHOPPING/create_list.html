@@ -71,7 +71,7 @@
                     <h5><i class="fa-solid fa-cart-shopping"></i> {{ t('shopping_create_list', default='Create New Shopping List') | e }}</h5>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('personal.shopping.main', tab='dashboard') | e }}" id="createListForm" class="validate-form">
+                    <form method="POST" action="{{ url_for('personal.shopping.main', tab='create-list') | e }}" id="createListForm" class="validate-form">
                         {{ list_form.hidden_tag() }}
                         <input type="hidden" name="action" value="create_list">
                         <div class="mb-3">
@@ -99,4 +99,11 @@
 
 {% block extra_scripts %}
 <script defer src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.toast').forEach(toast => {
+        new bootstrap.Toast(toast).show();
+    });
+});
+</script>
 {% endblock %}
