@@ -61,7 +61,7 @@ def initialize_app_data(app):
             logger.info(f"MongoDB database: {db_instance.name}", extra={'session_id': 'no-session-id'})
             collections = db_instance.list_collection_names()
             
-            # Define collection schemas (unchanged)
+            # Define collection schemas
             collection_schemas = {
                 'users': {
                     'validator': {
@@ -298,24 +298,21 @@ def initialize_app_data(app):
                                     'bsonType': 'array',
                                     'items': {
                                         'bsonType': 'object',
-                                        'required': ['name', 'quantity', 'price', 'category',
-                                        'status', 'created_at', 'updated_at'],
+                                        'required': ['name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at'],
                                         'properties': {
                                             'name': {'bsonType': 'string'},
                                             'quantity': {'bsonType': 'int', 'minimum': 1},
                                             'price': {'bsonType': 'double', 'minimum': 0},
-                                            'category': {'enum': ['fruits', 'vegetables', 'dairy',
-                                            'meat', 'grains', 'beverages', 'household', 'other']},
+                                            'category': {'enum': ['fruits', 'vegetables', 'dairy', 'meat', 'grains', 'beverages', 'household', 'other']},
                                             'status': {'enum': ['to_buy', 'bought']},
                                             'created_at': {'bsonType': 'date'},
                                             'updated_at': {'bsonType': 'date'},
                                             'store': {'bsonType': ['string', 'null']},
                                             'frequency': {'bsonType': 'int', 'minimum': 1},
-                                            'unit': {'bsonType': 'string', 'enum': ['piece', 'kg',
-                                            'liter', 'pack', 'unit', 'other']}
+                                            'unit': {'bsonType': 'string', 'enum': ['piece', 'kg', 'liter', 'pack', 'unit', 'other']}
                                         }
                                     }
-                                 }
+                                }
                             }
                         }
                     },
@@ -475,22 +472,22 @@ def initialize_app_data(app):
                 }
             }
             
-        # Apply collection schemas and indexes
-        for collection_name, config in collection_schemas.items():
-            try:
-                db_instance.command('collMod', collection_name, validator=config['validator'])
-                logger.info(f"Applied schema to {collection_name}")
-            except Exception as e:
-                logger.error(f"Error applying schema to {collection_name}: {str(e)}", exc_info=True)
-                raise
-
-            for index in config.get('indexes', []):
+            # Apply collection schemas and indexes
+            for collection_name, config in collection_schemas.items():
                 try:
-                    db_instance[collection_name].create_index(index['key'])
-                    logger.info(f"Created index for {collection_name}: {index['key']}")
+                    db_instance.command('collMod', collection_name, validator=config['validator'])
+                    logger.info(f"Applied schema to {collection_name}")
                 except Exception as e:
-                    logger.error(f"Error creating index for {collection_name}: {str(e)}", exc_info=True)
+                    logger.error(f"Error applying schema to {collection_name}: {str(e)}", exc_info=True)
                     raise
+
+                for index in config.get('indexes', []):
+                    try:
+                        db_instance[collection_name].create_index(index['key'])
+                        logger.info(f"Created index for {collection_name}: {index['key']}")
+                    except Exception as e:
+                        logger.error(f"Error creating index for {collection_name}: {str(e)}", exc_info=True)
+                        raise
             
             # Initialize collections and indexes
             for collection_name, config in collection_schemas.items():
@@ -1949,4 +1946,3 @@ def create_shopping_items_bulk(db, items_data):
         logger.error(f"Error creating bulk shopping items: {str(e)}", 
                     exc_info=True, extra={'session_id': items_data[0].get('session_id', 'no-session-id') if items_data else 'no-session-id'})
         raise
-
