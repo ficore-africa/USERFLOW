@@ -128,7 +128,6 @@ class ShoppingListForm(FlaskForm):
 
     def validate_budget(self, budget):
         if budget.data is not None:
-            # Ensure budget is formatted to 2 decimal places to match client-side
             budget.data = round(float(budget.data), 2)
 
 class ShoppingItemForm(FlaskForm):
@@ -411,6 +410,82 @@ def main():
                     flash(trans('shopping_over_budget', default='Warning: Total spent exceeds budget by ') + format_currency(total_spent - shopping_list['budget']) + '.', 'warning')
             return redirect(url_for('personal.shopping.main', tab='add-items', list_id=list_id))
 
+        elif action == 'save_list':
+            list_id = request.form.get('list_id')
+            if not ObjectId.is_valid(list_id):
+                flash(trans('shopping_invalid_list_id', default='Invalid list ID.'), 'danger')
+                return redirect(url_for('personal.shopping.main', tab='dashboard'))
+            filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
+            shopping_list = db.shopping_lists.find_one({'_id': ObjectId(list_id), **filter_criteria})
+            if not shopping_list:
+                flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
+                return redirect(url_for('personal.shopping.main', tab='dashboard'))
+            added = 0
+            try:
+                with db.client.start_session() as mongo_session:
+                    with mongo_session.start_transaction():
+                        # Process items from form
+                        index = 0
+                        while f'items[{index}][name]' in request.form:
+                            new_name = request.form.get(f'items[{index}][name]', '').strip()
+                            if not new_name:
+                                index += 1
+                                continue
+                            try:
+                                new_quantity間に
+
+                                new_quantity = int(request.form.get(f'items[{index}][quantity]', 1))
+                                new_price = float(clean_currency(request.form.get(f'items[{index}][price]', '0')))
+                                new_unit = request.form.get(f'items[{index}][unit]', 'piece')
+                                new_category = request.form.get(f'items[{index}][category]', auto_categorize_item(new_name))
+                                new_status = request.form.get(f'items[{index}][status]', 'to_buy')
+                                new_store = request.form.get(f'items[{index}][store]', 'Unknown')
+                                new_frequency = int(request.form.get(f'items[{index}][frequency]', 7))
+                                
+                                if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
+                                    raise ValueError('Invalid input range')
+                                
+                                new_item_data = {
+                                    '_id': ObjectId(),
+                                    'list_id': list_id,
+                                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
+                                    'session_id': session['sid'],
+                                    'name': new_name,
+                                    'quantity': new_quantity,
+                                    'price': new_price,
+                                    'unit': new_unit,
+                                    'category': new_category,
+                                    'status': new_status,
+                                    'store': new_store,
+                                    'frequency': new_frequency,
+                                    'created_at': datetime.utcnow(),
+                                    'updated_at': datetime.utcnow()
+                                }
+                                db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                                added += 1
+                                if current_user.is_authenticated and not is_admin():
+                                    if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
+                                        flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
+                                        return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
+                            except ValueError as e:
+                                flash(trans('shopping_item_error', default='Error adding item: ') + str(e), 'danger')
+                            index += 1
+                        if added > 0:
+                            items = list(db.shopping_items.find({'list_id': list_id}, session=mongo_session))
+                            total_spent = sum(item['price'] * item['quantity'] for item in items)
+                            db.shopping_lists.update_one(
+                                {'_id': ObjectId(list_id)},
+                                {'$set': {'total_spent': total_spent, 'updated_at': datetime.utcnow(), 'status': 'saved'}},
+                                session=mongo_session
+                            )
+                            flash(trans('shopping_list_saved', default=f'{added} item(s) saved successfully!'), 'success')
+                            if total_spent > shopping_list['budget']:
+                                flash(trans('shopping_over_budget', default='Warning: Total spent exceeds budget by ') + format_currency(total_spent - shopping_list['budget']) + '.', 'warning')
+            except Exception as e:
+                logger.error(f"Failed to save list {list_id}: {str(e)}")
+                flash(trans('shopping_list_error', default='Error saving list.'), 'danger')
+            return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
+
         elif action == 'share_list' and share_form.validate_on_submit():
             list_id = request.form.get('list_id')
             if not ObjectId.is_valid(list_id):
@@ -579,7 +654,7 @@ def get_list_details():
         'collaborators': shopping_list.get('collaborators', []),
         'items': [{
             'id': str(item['_id']),
-            'name': item.get('name'),
+            'name': item.option('name'),
             'quantity': item.get('quantity', 1),
             'price': float(item.get('price', 0.0)),
             'unit': item.get('unit', 'piece'),
@@ -602,7 +677,7 @@ def get_list_details():
             format_datetime=format_date,
             trans=trans
         )
-        return jsonify({'success': True, 'html': html})
+        return jsonify({'success': True, 'html': html, 'items': selected_list['items']})
     except Exception as e:
         logger.error(f"Error rendering list details for {list_id}: {str(e)}")
         return jsonify({'success': False, 'error': trans('shopping_load_error', default='Failed to load list details.')}), 500
