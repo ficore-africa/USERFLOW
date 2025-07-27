@@ -1054,7 +1054,7 @@ def requires_role(role):
 
 def check_ficore_credit_balance(required_amount=1, user_id=None):
     """
-    Check if user has sufficient Ficore Credit balance.
+    Check if user has sufficient Ficore Credit balance with enhanced logging.
     
     Args:
         required_amount: Required credit amount (default: 1)
@@ -1066,21 +1066,75 @@ def check_ficore_credit_balance(required_amount=1, user_id=None):
     try:
         with current_app.app_context():
             from flask_login import current_user
+            # Validate required_amount
+            if not isinstance(required_amount, (int, float)) or required_amount < 0:
+                logger.error(
+                    f"Invalid required_amount {required_amount} for credit balance check",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id or 'unknown'}
+                )
+                return False
+            
+            # Determine user_id
             if user_id is None and current_user.is_authenticated:
                 user_id = current_user.id
             if not user_id:
+                logger.error(
+                    f"No user_id provided and no authenticated user for credit balance check",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': 'unknown'}
+                )
                 return False
+            
+            # Validate user_id
+            if not isinstance(user_id, str) or not user_id.strip():
+                logger.error(
+                    f"Invalid user_id format: {user_id}",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id or 'unknown'}
+                )
+                return False
+            
             db = get_mongo_db()
             if db is None:
+                logger.error(
+                    f"Failed to connect to MongoDB for credit balance check for user {user_id}",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id}
+                )
                 return False
+            
             user_query = get_user_query(user_id)
             user = db.users.find_one(user_query)
             if not user:
+                logger.error(
+                    f"User {user_id} not found for credit balance check",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id}
+                )
                 return False
-            credit_balance = user.get('ficore_credit_balance', 0)
-            return credit_balance >= required_amount
+            
+            current_balance = user.get('ficore_credit_balance', 0)
+            if not isinstance(current_balance, (int, float)) or current_balance < 0:
+                logger.warning(
+                    f"Invalid credit balance for user {user_id}: {current_balance}",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id}
+                )
+                return False
+            
+            if current_balance < required_amount:
+                logger.warning(
+                    f"Insufficient credits for user {user_id}: required {required_amount}, available {current_balance}",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id}
+                )
+                return False
+            
+            logger.debug(
+                f"Credit balance check passed for user {user_id}: required {required_amount}, available {current_balance}",
+                extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id}
+            )
+            return True
     except Exception as e:
-        logger.error(f"{trans('general_ficore_credit_balance_check_error', default='Error checking Ficore Credit balance for user')} {user_id}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Unexpected error checking Ficore Credit balance for user {user_id}: {str(e)}",
+            exc_info=True,
+            extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id or 'unknown'}
+        )
         return False
 
 def get_user_query(user_id):
