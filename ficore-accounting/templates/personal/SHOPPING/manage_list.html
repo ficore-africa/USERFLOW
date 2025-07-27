@@ -187,33 +187,45 @@
                             <select id="manage-list-select" class="form-select" onchange="loadListDetails(this.value, 'manage-list')">
                                 <option value="">{{ t('general_select', default='Select a list') | e }}</option>
                                 {% for list_id, lst in lists.items() %}
-                                    <option value="{{ lst.id | e }}" {{ 'selected' if selected_list_id == lst.id else '' }}>{{ lst.name | e }}</option>
+                                    {% if lst.status != 'saved' %}
+                                        <option value="{{ lst.id | e }}" {{ 'selected' if selected_list_id == lst.id or (not selected_list_id and loop.first) else '' }}>{{ lst.name | e }}</option>
+                                    {% endif %}
                                 {% endfor %}
                             </select>
                         </div>
                         <div id="manage-list-details">
-                            {% if selected_list and selected_list.id %}
-                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget_raw | default(0.0)) | e }}</span></p>
-                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent_raw | default(0.0)) | e }}</span></p>
-                                <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">
-                                    {% if selected_list.budget_raw is defined and selected_list.total_spent_raw is defined %}
-                                        {{ format_currency((selected_list.budget_raw | float | default(0.0)) - (selected_list.total_spent_raw | float | default(0.0))) | e }}
-                                    {% else %}
-                                        {{ format_currency(0.0) | e }}
-                                    {% endif %}
-                                </span></p>
-                                <div class="progress">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
+                            {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
+                                <form method="POST" action="{{ url_for('personal.shopping.main', tab='manage-list') | e }}" class="validate-form" id="manageListForm">
+                                    {{ list_form.hidden_tag() }}
+                                    <input type="hidden" name="action" value="update_list">
+                                    <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
+                                    <div class="mb-3">
+                                        <label for="list_name" class="form-label">{{ t('general_list_name', default='List Name') | e }}</label>
+                                        <input type="text" id="list_name" name="name" class="form-control" value="{{ selected_list.name | e }}" required>
+                                        <div class="invalid-feedback">{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}</div>
                                     </div>
-                                    <div class="card-body">
-                                        <form id="manageListForm" class="validate-form" method="POST" action="{{ url_for('personal.shopping.main', tab='manage-list') | e }}">
-                                            <input type="hidden" name="action" value="update_list">
-                                            <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                            {{ list_form.csrf_token }}
+                                    <div class="mb-3">
+                                        <label for="list_budget" class="form-label">{{ t('general_budget', default='Budget') | e }}</label>
+                                        <input type="text" id="list_budget" name="budget" class="form-control number-input" value="{{ format_currency(selected_list.budget_raw | default(0.0)) | e }}" required>
+                                        <div class="invalid-feedback">{{ t('shopping_budget_required', default='Budget is required') | e }}</div>
+                                        <small id="budget_help" class="form-text text-muted">{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}</small>
+                                    </div>
+                                    <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent_raw | default(0.0)) | e }}</span></p>
+                                    <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">
+                                        {% if selected_list.budget_raw is defined and selected_list.total_spent_raw is defined %}
+                                            {{ format_currency((selected_list.budget_raw | float | default(0.0)) - (selected_list.total_spent_raw | float | default(0.0))) | e }}
+                                        {% else %}
+                                            {{ format_currency(0.0) | e }}
+                                        {% endif %}
+                                    </span></p>
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" style="width: {{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                    <div class="card mb-4">
+                                        <div class="card-header">
+                                            <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
+                                        </div>
+                                        <div class="card-body">
                                             <div class="table-responsive">
                                                 <table class="table table-striped" id="items-table">
                                                     <thead>
@@ -230,58 +242,91 @@
                                                         </tr>
                                                     </thead>
                                                     <tbody id="items-table-body">
-                                                        {% for item in selected_list.items %}
+                                                        {% if selected_list.items %}
+                                                            {% for item in selected_list.items %}
+                                                                <tr>
+                                                                    <td>{{ item.name | e }}</td>
+                                                                    <td>{{ item.quantity | e }}</td>
+                                                                    <td>{{ format_currency(item.price | default(0.0)) | e }}</td>
+                                                                    <td>{{ item.unit | e }}</td>
+                                                                    <td>{{ item.category | e }}</td>
+                                                                    <td>{{ item.status | e }}</td>
+                                                                    <td>{{ item.store | e }}</td>
+                                                                    <td>{{ item.frequency | e }} {{ t('general_days', default='days') | e }}</td>
+                                                                    <td>
+                                                                        <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('{{ item.id | e }}', '{{ item.name | e }}', {{ item.quantity | e }}, '{{ format_currency(item.price | default(0.0)) | e }}', '{{ item.unit | e }}', '{{ item.category | e }}', '{{ item.status | e }}', '{{ item.store | e }}', {{ item.frequency | e }})">
+                                                                            <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
+                                                                        </button>
+                                                                        <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('{{ item.id | e }}')">
+                                                                            <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                        {% else %}
                                                             <tr>
-                                                                <td><input type="text" name="items[{{ loop.index0 }}][name]" value="{{ item.name | e }}" class="form-control new-item-name" required></td>
-                                                                <td><input type="number" name="items[{{ loop.index0 }}][quantity]" value="{{ item.quantity | e }}" class="form-control number-input new-item-quantity" min="1" max="1000" required></td>
-                                                                <td><input type="text" name="items[{{ loop.index0 }}][price]" value="{{ format_currency(item.price) | e }}" class="form-control number-input new-item-price" required></td>
-                                                                <td>
-                                                                    <select name="items[{{ loop.index0 }}][unit]" class="form-control">
-                                                                        {% for value, label in item_form.unit.choices %}
-                                                                            <option value="{{ value | e }}" {{ 'selected' if value == item.unit else '' }}>{{ t(value, default=label) | e }}</option>
-                                                                        {% endfor %}
-                                                                    </select>
-                                                                </td>
-                                                                <td>
-                                                                    <select name="items[{{ loop.index0 }}][category]" class="form-control">
-                                                                        {% for value, label in item_form.category.choices %}
-                                                                            <option value="{{ value | e }}" {{ 'selected' if value == item.category else '' }}>{{ t(value, default=label) | e }}</option>
-                                                                        {% endfor %}
-                                                                    </select>
-                                                                </td>
-                                                                <td>
-                                                                    <select name="items[{{ loop.index0 }}][status]" class="form-control">
-                                                                        {% for value, label in item_form.status.choices %}
-                                                                            <option value="{{ value | e }}" {{ 'selected' if value == item.status else '' }}>{{ t(value, default=label) | e }}</option>
-                                                                        {% endfor %}
-                                                                    </select>
-                                                                </td>
-                                                                <td><input type="text" name="items[{{ loop.index0 }}][store]" value="{{ item.store | e }}" class="form-control"></td>
-                                                                <td><input type="number" name="items[{{ loop.index0 }}][frequency]" value="{{ item.frequency | e }}" class="form-control number-input new-item-frequency" min="1" max="365"></td>
-                                                                <td>
-                                                                    <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('{{ item.id | e }}', '{{ item.name | e }}', {{ item.quantity | e }}, '{{ format_currency(item.price) | e }}', '{{ item.unit | e }}', '{{ item.category | e }}', '{{ item.status | e }}', '{{ item.store | e }}', {{ item.frequency | e }})">
-                                                                        <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
-                                                                    </button>
-                                                                    <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('{{ item.id | e }}')">
-                                                                        <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
-                                                                    </button>
+                                                                <td colspan="9" class="empty-state text-center">
+                                                                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                                                                    <p>{{ t('shopping_empty_list', default='Your shopping list is empty. Add items to get started!') | e }}</p>
+                                                                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                                                                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                                                                    </a>
                                                                 </td>
                                                             </tr>
-                                                        {% endfor %}
+                                                        {% endif %}
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <button type="submit" class="btn btn-primary mt-3" id="saveManageListSubmit">
-                                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                                                <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
-                                            </button>
-                                        </form>
+                                        </div>
                                     </div>
-                                </div>
+                                    <div class="mb-3">
+                                        <h6><i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item to List') | e }}</h6>
+                                        <div id="new-items-container">
+                                            <div class="row new-item-row">
+                                                <div class="col-md-3 mb-3">
+                                                    <input type="text" name="new_items[0][name]" class="form-control new-item-name" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
+                                                    <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
+                                                </div>
+                                                <div class="col-md-2 mb-3">
+                                                    <input type="number" name="new_items[0][quantity]" class="form-control new-item-quantity number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" required>
+                                                    <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
+                                                </div>
+                                                <div class="col-md-2 mb-3">
+                                                    <input type="text" name="new_items[0][price]" class="form-control new-item-price number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" required>
+                                                    <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
+                                                </div>
+                                                <div class="col-md-2 mb-3">
+                                                    <select name="new_items[0][unit]" class="form-control">
+                                                        {% for value, label in item_form.unit.choices %}
+                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3 mb-3">
+                                                    <select name="new_items[0][category]" class="form-control">
+                                                        {% for value, label in item_form.category.choices %}
+                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="addNewItemRow">
+                                            <i class="fa-solid fa-plus"></i> {{ t('shopping_add_another_item', default='Add Another Item') | e }}
+                                        </button>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" id="manageListSubmit">
+                                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                        <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
+                                    </button>
+                                </form>
                             {% else %}
                                 <div class="empty-state text-center">
                                     <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                                     <p>{{ t('shopping_no_list_selected', default='No active list selected. Please select an active list to manage.') | e }}</p>
+                                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                                    </a>
                                 </div>
                             {% endif %}
                         </div>
@@ -289,6 +334,9 @@
                         <div class="empty-state text-center">
                             <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                             <p>{{ t('shopping_no_lists', default='No active lists found. Create one to get started.') | e }}</p>
+                            <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                                <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                            </a>
                         </div>
                     {% endif %}
                 </div>
@@ -300,4 +348,53 @@
 
 {% block extra_scripts %}
 <script defer src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let itemIndex = 1;
+    document.getElementById('addNewItemRow')?.addEventListener('click', function() {
+        const container = document.getElementById('new-items-container');
+        const newRow = document.createElement('div');
+        newRow.className = 'row new-item-row';
+        newRow.innerHTML = `
+            <div class="col-md-3 mb-3">
+                <input type="text" name="new_items[${itemIndex}][name]" class="form-control new-item-name" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
+                <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <input type="number" name="new_items[${itemIndex}][quantity]" class="form-control new-item-quantity number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" required>
+                <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
+            </div>
+            <div class="col-md-2 mb-3">
+                <input type="text" name="new_items[${itemIndex}][price]" class="form-control new-item-price number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" required>
+                <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
+            </div>
+            <div class="col-md-2 mb-3">
+                <select name="new_items[${itemIndex}][unit]" class="form-control">
+                    {% for value, label in item_form.unit.choices %}
+                        <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <select name="new_items[${itemIndex}][category]" class="form-control">
+                    {% for value, label in item_form.category.choices %}
+                        <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        `;
+        container.appendChild(newRow);
+        itemIndex++;
+    });
+
+    document.querySelectorAll('.toast').forEach(toast => {
+        new bootstrap.Toast(toast).show();
+    });
+
+    const select = document.getElementById('manage-list-select');
+    if (select && select.value) {
+        loadListDetails(select.value, 'manage-list');
+    }
+});
+</script>
 {% endblock %}
