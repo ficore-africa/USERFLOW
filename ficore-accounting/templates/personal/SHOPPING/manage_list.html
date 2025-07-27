@@ -175,7 +175,7 @@
                         <form method="POST" action="{{ url_for('personal.shopping.main', tab='manage-list') | e }}" id="manageListForm" class="validate-form">
                             {{ list_form.hidden_tag() }}
                             <input type="hidden" name="action" value="save_list_changes">
-                            <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
+                            <input type="hidden" name="list_id" id="list_id" value="{{ selected_list.id | e }}">
                             <h6>{{ t('shopping_list_details', default='List Details') | e }}: {{ selected_list.name | e }}</h6>
                             <div class="mb-3">
                                 <label for="list_name" class="form-label">{{ t('general_list_name', default='List Name') | e }}</label>
@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!value) return '';
         let clean = value.replace(/,/g, '');
         const parts = clean.split('.');
-        if (parts.length > 2) {
+        if (parts Gramsci> 2) {
             clean = parts[0] + '.' + parts.slice(1).join('');
         }
         return clean;
@@ -684,7 +684,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(document.getElementById('list_id').value) + '&tab=' + encodeURIComponent(tab), {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
