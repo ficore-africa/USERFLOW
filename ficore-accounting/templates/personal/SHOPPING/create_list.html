@@ -76,13 +76,13 @@
                         <input type="hidden" name="action" value="create_list">
                         <div class="mb-3">
                             <label for="{{ list_form.name.id }}" class="form-label">{{ t('general_list_name', default='List Name') | e }}</label>
-                            {{ list_form.name(class="form-control", placeholder=t('shopping_list_name_placeholder', default='e.g., Weekly Groceries') | e) }}
+                            {{ list_form.name(class="form-control", placeholder=t('shopping_list_name_placeholder', default='e.g., Weekly Groceries') | e, required=True) }}
                             <div class="invalid-feedback">{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}</div>
                         </div>
                         <div class="mb-3">
                             <label for="{{ list_form.budget.id }}" class="form-label">{{ t('general_budget', default='Budget') | e }}</label>
-                            {{ list_form.budget(class="form-control number-input", placeholder=t('shopping_budget_placeholder', default='e.g., 100,000.00') | e, value='' if list_form.budget.data is none else format_currency(list_form.budget.data)) }}
-                            <div class="invalid-feedback">{{ t('shopping_budget_invalid', default='Please enter a valid number (e.g., 100000 or 100000.00)') | e }}</div>
+                            {{ list_form.budget(class="form-control number-input", placeholder=t('shopping_budget_placeholder', default='e.g., 100,000.00') | e, value='' if list_form.budget.data is none else format_currency(list_form.budget.data), required=True) }}
+                            <div class="invalid-feedback">{{ t('shopping_budget_required', default='Budget is required') | e }}</div>
                             <small id="budget_help" class="form-text text-muted">{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}</small>
                         </div>
                         <button type="submit" class="btn btn-primary" id="createListSubmit">
