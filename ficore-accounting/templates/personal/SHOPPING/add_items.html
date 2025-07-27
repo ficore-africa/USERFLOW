@@ -194,11 +194,17 @@
                         </div>
                         <div id="dashboard-content">
                             {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
-                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget) | e }}</span></p>
-                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent) | e }}</span></p>
-                                <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">{{ format_currency(selected_list.budget - selected_list.total_spent) | e }}</span></p>
+                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget_raw | default(0.0)) | e }}</span></p>
+                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent_raw | default(0.0)) | e }}</span></p>
+                                <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">
+                                    {% if selected_list.budget_raw is defined and selected_list.total_spent_raw is defined %}
+                                        {{ format_currency((selected_list.budget_raw | float | default(0.0)) - (selected_list.total_spent_raw | float | default(0.0))) | e }}
+                                    {% else %}
+                                        {{ format_currency(0.0) | e }}
+                                    {% endif %}
+                                </span></p>
                                 <div class="progress">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    <div class="progress-bar" role="progressbar" style="width: {{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
                                 <div class="card mb-4">
                                     <div class="card-header">
