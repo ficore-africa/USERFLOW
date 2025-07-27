@@ -1,3 +1,10 @@
+{% extends "base.html" %}
+
+{% block page_scripts %}
+    <script src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
+{% endblock %}
+
+{% block content %}
 {% if selected_list and selected_list.id %}
     <form method="POST" action="{{ url_for('personal.shopping.main', tab='manage-list') | e }}" id="manageListForm" class="validate-form">
         {{ list_form.hidden_tag() }}
@@ -149,3 +156,4 @@
         <p>{{ t('shopping_no_list_selected', default='No list selected or the selected list is not saved. Please select a saved list to manage.') | e }}</p>
     </div>
 {% endif %}
+{% endblock %}
