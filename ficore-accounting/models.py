@@ -1,5 +1,6 @@
 from datetime import datetime
 from pymongo import ASCENDING, DESCENDING
+import os
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, DuplicateKeyError, OperationFailure
 from werkzeug.security import generate_password_hash
 from bson import ObjectId
@@ -33,8 +34,6 @@ def get_db():
 def initialize_app_data(app):
     """
     Initialize MongoDB collections and indexes.
-    Performs a one-time reset of shopping-related collections (shopping_lists, shopping_items, pending_deletions)
-    in the testing environment on first deployment.
     
     Args:
         app: Flask application instance
@@ -254,7 +253,7 @@ def initialize_app_data(app):
                     'validator': {
                         '$jsonSchema': {
                             'bsonType': 'object',
-                            'required': ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at'],
+                            'required': ['user_id', 'session_id', 'list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'unit'],
                             'properties': {
                                 'user_id': {'bsonType': ['string', 'null']},
                                 'session_id': {'bsonType': 'string'},
@@ -268,7 +267,7 @@ def initialize_app_data(app):
                                 'updated_at': {'bsonType': 'date'},
                                 'store': {'bsonType': ['string', 'null']},
                                 'frequency': {'bsonType': 'int', 'minimum': 1},
-                                'unit': {'bsonType': ['string', 'null']}
+                                'unit': {'bsonType': 'string', 'enum': ['piece', 'kg', 'liter', 'pack', 'unit', 'other']}
                             }
                         }
                     },
@@ -281,7 +280,7 @@ def initialize_app_data(app):
                     'validator': {
                         '$jsonSchema': {
                             'bsonType': 'object',
-                            'required': ['name', 'session_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status'],
+                            'required': ['name', 'session_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status', 'items'],
                             'properties': {
                                 'name': {'bsonType': 'string'},
                                 'user_id': {'bsonType': ['string', 'null']},
@@ -294,30 +293,35 @@ def initialize_app_data(app):
                                     'items': {'bsonType': 'string'}
                                 },
                                 'total_spent': {'bsonType': 'double', 'minimum': 0},
-                                'status': {'enum': ['active', 'saved']}
+                                'status': {'enum': ['active', 'saved']},
+                                'items': {
+                                    'bsonType': 'array',
+                                    'items': {
+                                        'bsonType': 'object',
+                                        'required': ['name', 'quantity', 'price', 'category',
+                                        'status', 'created_at', 'updated_at'],
+                                        'properties': {
+                                            'name': {'bsonType': 'string'},
+                                            'quantity': {'bsonType': 'int', 'minimum': 1},
+                                            'price': {'bsonType': 'double', 'minimum': 0},
+                                            'category': {'enum': ['fruits', 'vegetables', 'dairy',
+                                            'meat', 'grains', 'beverages', 'household', 'other']},
+                                            'status': {'enum': ['to_buy', 'bought']},
+                                            'created_at': {'bsonType': 'date'},
+                                            'updated_at': {'bsonType': 'date'},
+                                            'store': {'bsonType': ['string', 'null']},
+                                            'frequency': {'bsonType': 'int', 'minimum': 1},
+                                            'unit': {'bsonType': 'string', 'enum': ['piece', 'kg',
+                                            'liter', 'pack', 'unit', 'other']}
+                                        }
+                                    }
+                                 }
                             }
                         }
                     },
                     'indexes': [
                         {'key': [('user_id', ASCENDING), ('status', ASCENDING), ('updated_at', DESCENDING)]},
                         {'key': [('session_id', ASCENDING), ('status', ASCENDING), ('updated_at', DESCENDING)]}
-                    ]
-                },
-                'pending_deletions': {
-                    'validator': {
-                        '$jsonSchema': {
-                            'bsonType': 'object',
-                            'required': ['list_id', 'created_at', 'expires_at'],
-                            'properties': {
-                                'list_id': {'bsonType': 'string'},
-                                'user_id': {'bsonType': ['string', 'null']},
-                                'created_at': {'bsonType': 'date'},
-                                'expires_at': {'bsonType': 'date'}
-                            }
-                        }
-                    },
-                    'indexes': [
-                        {'key': [('list_id', ASCENDING), ('user_id', ASCENDING)]}
                     ]
                 },
                 'feedback': {
@@ -471,84 +475,21 @@ def initialize_app_data(app):
                 }
             }
             
-            # One-time reset of shopping-related collections
-            reset_flag = db_instance.system_config.find_one({'_id': 'shopping_data_reset'})
-            if not reset_flag or not reset_flag.get('value', False):
+        # Apply collection schemas and indexes
+        for collection_name, config in collection_schemas.items():
+            try:
+                db_instance.command('collMod', collection_name, validator=config['validator'])
+                logger.info(f"Applied schema to {collection_name}")
+            except Exception as e:
+                logger.error(f"Error applying schema to {collection_name}: {str(e)}", exc_info=True)
+                raise
+
+            for index in config.get('indexes', []):
                 try:
-                    # Delete all shopping lists
-                    lists_result = db_instance.shopping_lists.delete_many({})
-                    deleted_lists_count = lists_result.deleted_count
-                    logger.info(
-                        f"{trans('general_shopping_lists_deleted', default='Deleted {count} shopping lists')}: {deleted_lists_count}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Delete all shopping items
-                    items_result = db_instance.shopping_items.delete_many({})
-                    deleted_items_count = items_result.deleted_count
-                    logger.info(
-                        f"{trans('general_shopping_items_deleted', default='Deleted {count} shopping items')}: {deleted_items_count}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Delete all pending deletions
-                    pending_result = db_instance.pending_deletions.delete_many({})
-                    deleted_pending_count = pending_result.deleted_count
-                    logger.info(
-                        f"{trans('general_pending_deletions_deleted', default='Deleted {count} pending deletions')}: {deleted_pending_count}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Delete related ficore_credit_transactions
-                    transactions_result = db_instance.ficore_credit_transactions.delete_many({'type': 'create_shopping_list'})
-                    deleted_transactions_count = transactions_result.deleted_count
-                    logger.info(
-                        f"{trans('general_ficore_transactions_deleted', default='Deleted {count} ficore credit transactions')}: {deleted_transactions_count}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Log the reset action in audit_logs
-                    audit_data = {
-                        'admin_id': 'system',
-                        'action': 'bulk_delete_shopping_data',
-                        'details': {
-                            'deleted_lists': deleted_lists_count,
-                            'deleted_items': deleted_items_count,
-                            'deleted_pending': deleted_pending_count,
-                            'deleted_transactions': deleted_transactions_count,
-                            'timestamp': datetime.utcnow().isoformat()
-                        },
-                        'timestamp': datetime.utcnow()
-                    }
-                    db_instance.audit_logs.insert_one(audit_data)
-                    logger.info(
-                        f"{trans('general_audit_log_created', default='Created audit log for bulk shopping data deletion')}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Set the reset flag
-                    db_instance.system_config.update_one(
-                        {'_id': 'shopping_data_reset'},
-                        {'$set': {'value': True, 'updated_at': datetime.utcnow()}},
-                        upsert=True
-                    )
-                    logger.info(
-                        f"{trans('general_shopping_reset_flag_set', default='Set shopping data reset flag')}",
-                        extra={'session_id': 'no-session-id'}
-                    )
-
-                    # Clear cache for shopping lists
-                    get_shopping_lists.cache_clear()
-                    logger.info(
-                        f"{trans('general_cache_cleared', default='Cleared cache for shopping lists')}",
-                        extra={'session_id': 'no-session-id'}
-                    )
+                    db_instance[collection_name].create_index(index['key'])
+                    logger.info(f"Created index for {collection_name}: {index['key']}")
                 except Exception as e:
-                    logger.error(
-                        f"{trans('general_shopping_reset_error', default='Error resetting shopping data')}: {str(e)}",
-                        exc_info=True,
-                        extra={'session_id': 'no-session-id', 'stack_trace': traceback.format_exc()}
-                    )
+                    logger.error(f"Error creating index for {collection_name}: {str(e)}", exc_info=True)
                     raise
             
             # Initialize collections and indexes
@@ -1779,6 +1720,7 @@ def create_shopping_list(db, list_data):
         if not all(field in list_data for field in required_fields):
             raise ValueError(trans('general_missing_shopping_list_fields', default='Missing required shopping list fields'))
         list_data['_id'] = str(uuid.uuid4())
+        list_data['items'] = list_data.get('items', [])
         result = db.shopping_lists.insert_one(list_data)
         logger.info(f"{trans('general_shopping_list_created', default='Created shopping list with ID')}: {result.inserted_id}", 
                    extra={'session_id': list_data.get('session_id', 'no-session-id')})
@@ -1790,6 +1732,31 @@ def create_shopping_list(db, list_data):
         raise
 
 @lru_cache(maxsize=128)
+def normalize_shopping_list(record):
+    """
+    Normalize a shopping list record to ensure consistent structure.
+    
+    Args:
+        record: Raw shopping list document from MongoDB
+    
+    Returns:
+        dict: Normalized shopping list dictionary
+    """
+    return {
+        'id': str(record.get('_id', '')),
+        'name': record.get('name', ''),
+        'user_id': record.get('user_id', None),
+        'session_id': record.get('session_id', ''),
+        'budget': float(record.get('budget', 0.0)),
+        'created_at': record.get('created_at', datetime.utcnow()),
+        'updated_at': record.get('updated_at', datetime.utcnow()),
+        'collaborators': record.get('collaborators', []),
+        'total_spent': float(record.get('total_spent', 0.0)),
+        'status': record.get('status', 'active'),
+        'items': record.get('items', []) if isinstance(record.get('items'), list) else []
+    }
+
+@lru_cache(maxsize=128)
 def get_shopping_lists(db, filter_kwargs):
     """
     Retrieve shopping list records based on filter criteria.
@@ -1799,14 +1766,15 @@ def get_shopping_lists(db, filter_kwargs):
         filter_kwargs: Dictionary of filter criteria
     
     Returns:
-        list: List of shopping list records
+        list: List of normalized shopping list records
     """
     try:
-        return list(db.shopping_lists.find(filter_kwargs).sort('updated_at', DESCENDING))
+        return [normalize_shopping_list(record) for record in db.shopping_lists.find(filter_kwargs).sort('updated_at', DESCENDING)]
     except Exception as e:
         logger.error(f"{trans('general_shopping_lists_fetch_error', default='Error getting shopping lists')}: {str(e)}", 
                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
+        
 
 def update_shopping_list(db, list_id, update_data):
     """
