@@ -11,7 +11,10 @@ document.addEventListener('DOMContentLoaded', function() {
         'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}",
         'budget_required': "{{ t('shopping_budget_required', default='Budget is required') | e }}",
         'name_required': "{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}",
-        'item_added': "{{ t('shopping_item_added', default='Item added successfully!') | e }}"
+        'item_added': "{{ t('shopping_item_added', default='Item added successfully!') | e }}",
+        'add_item_error': "{{ t('shopping_add_item_error', default='Failed to add item. Please try again.') | e }}",
+        'edit_item_error': "{{ t('shopping_edit_item_error', default='Failed to save item changes. Please try again.') | e }}",
+        'table_error': "{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}"
     };
 
     // Local state for items in dashboard
@@ -213,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (form.id === 'saveListForm') {
                         itemNames.push(...items.map(item => item.name.trim().toLowerCase()));
                     } else {
-                        form.querySelectorAll('input[name$="_name"]').forEach(input => {
+                        form.querySelectorAll('input[name$="[name]"]').forEach(input => {
                             if (input.value.trim()) {
                                 itemNames.push(input.value.trim().toLowerCase());
                             }
@@ -395,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
             toastEl.innerHTML = `
                 <div class="d-flex">
                     <div class="toast-body">
-                        {{ t('shopping_add_item_error', default='Failed to add item. Please try again.') | e }}
+                        ${helpTextTranslations['add_item_error']}
                     </div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
                 </div>
@@ -500,7 +503,7 @@ document.addEventListener('DOMContentLoaded', function() {
             toastEl.innerHTML = `
                 <div class="d-flex">
                     <div class="toast-body">
-                        {{ t('shopping_edit_item_error', default='Failed to save item changes. Please try again.') | e }}
+                        ${helpTextTranslations['edit_item_error']}
                     </div>
                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
                 </div>
@@ -510,12 +513,24 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Delete item from frontend state (dashboard)
+    // Delete item from frontend state (dashboard) or trigger server-side delete (manage-list)
     window.deleteItem = function(id) {
         try {
-            items = items.filter(item => item.id !== id);
-            updateItemsTable();
-            updateBudgetProgress(document.getElementById('saveListForm'));
+            if (document.getElementById('manageListForm')) {
+                // For manage-list tab, submit delete request to server
+                const form = document.getElementById('manageListForm');
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'delete_item_id';
+                input.value = id;
+                form.appendChild(input);
+                form.submit();
+            } else {
+                // For dashboard tab, update local state
+                items = items.filter(item => item.id !== id);
+                updateItemsTable();
+                updateBudgetProgress(document.getElementById('saveListForm'));
+            }
         } catch (error) {
             console.error('Error deleting item:', error);
         }
@@ -570,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <tr>
                     <td colspan="9" class="empty-state text-center">
                         <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
-                        <p>{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}</p>
+                        <p>${helpTextTranslations['table_error']}</p>
                     </td>
                 </tr>
             `;
