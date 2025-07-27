@@ -17,7 +17,7 @@ from reportlab.lib.units import inch
 from io import BytesIO
 from contextlib import nullcontext
 import uuid
-from models import log_tool_usage
+from models import log_tool_usage, get_shopping_lists
 from session_utils import create_anonymous_session
 import json
 
@@ -50,15 +50,18 @@ def auto_categorize_item(item_name):
 def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_session=None):
     try:
         if amount <= 0:
-            logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}")
+            logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}",
+                       extra={'session_id': session.get('sid', 'no-session-id')})
             return False
         user = db.users.find_one({'_id': user_id}, session=mongo_session)
         if not user:
-            logger.error(f"User {user_id} not found for credit deduction, action: {action}")
+            logger.error(f"User {user_id} not found for credit deduction, action: {action}",
+                       extra={'session_id': session.get('sid', 'no-session-id')})
             return False
         current_balance = user.get('ficore_credit_balance', 0)
         if current_balance < amount:
-            logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}, action: {action}")
+            logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}, action: {action}",
+                         extra={'session_id': session.get('sid', 'no-session-id')})
             return False
         session_to_use = mongo_session if mongo_session else db.client.start_session()
         owns_session = not mongo_session
@@ -70,7 +73,18 @@ def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_sessi
                     session=session_to_use
                 )
                 if result.modified_count == 0:
-                    logger.error(f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified")
+                    logger.error(f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified",
+                               extra={'session_id': session.get('sid', 'no-session-id')})
+                    db.ficore_credit_transactions.insert_one({
+                        '_id': ObjectId(),
+                        'user_id': user_id,
+                        'action': action,
+                        'amount': -amount,
+                        'item_id': str(item_id) if item_id else None,
+                        'timestamp': datetime.utcnow(),
+                        'session_id': session.get('sid', 'no-session-id'),
+                        'status': 'failed'
+                    }, session=session_to_use)
                     raise ValueError(f"Failed to update user balance for {user_id}")
                 transaction = {
                     '_id': ObjectId(),
@@ -83,16 +97,19 @@ def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_sessi
                     'status': 'completed'
                 }
                 db.ficore_credit_transactions.insert_one(transaction, session=session_to_use)
-            logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}")
+            logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}",
+                      extra={'session_id': session.get('sid', 'no-session-id')})
             return True
         except (ValueError, errors.PyMongoError) as e:
-            logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}")
+            logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
+                       exc_info=True, extra={'session_id': session.get('sid', 'no-session-id')})
             return False
         finally:
             if owns_session:
                 session_to_use.end_session()
     except Exception as e:
-        logger.error(f"Unexpected error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}")
+        logger.error(f"Unexpected error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}",
+                   exc_info=True, extra={'session_id': session.get('sid', 'no-session-id')})
         return False
 
 def custom_login_required(f):
@@ -262,18 +279,33 @@ def main():
         session['selected_list_id'] = selected_list_id
 
     selected_list = lists.get(selected_list_id, {})
-    items = list(db.shopping_items.find({'list_id': selected_list_id})) if selected_list_id else []
+    items = []
+    if selected_list_id:
+        list_items = list(db.shopping_items.find({'list_id': selected_list_id}))
+        items = [{
+            'id': str(item['_id']),
+            'name': item.get('name', ''),
+            'quantity': int(item.get('quantity', 1)),
+            'price': format_currency(float(item.get('price', 0.0))),
+            'price_raw': float(item.get('price', 0.0)),
+            'unit': item.get('unit', 'piece'),
+            'category': item.get('category', 'other'),
+            'status': item.get('status', 'to_buy'),
+            'store': item.get('store', 'Unknown'),
+            'frequency': int(item.get('frequency', 7))
+        } for item in list_items]
+
     categories = {}
     if selected_list_id:
         categories = {
-            trans('shopping_category_fruits', default='Fruits'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'fruits'),
-            trans('shopping_category_vegetables', default='Vegetables'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
-            trans('shopping_category_dairy', default='Dairy'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'dairy'),
-            trans('shopping_category_meat', default='Meat'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'meat'),
-            trans('shopping_category_grains', default='Grains'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'grains'),
-            trans('shopping_category_beverages', default='Beverages'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'beverages'),
-            trans('shopping_category_household', default='Household'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'household'),
-            trans('shopping_category_other', default='Other'): sum(item['price'] * item['quantity'] for item in items if item['category'] == 'other')
+            trans('shopping_category_fruits', default='Fruits'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'fruits'),
+            trans('shopping_category_vegetables', default='Vegetables'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
+            trans('shopping_category_dairy', default='Dairy'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'dairy'),
+            trans('shopping_category_meat', default='Meat'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'meat'),
+            trans('shopping_category_grains', default='Grains'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'grains'),
+            trans('shopping_category_beverages', default='Beverages'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'beverages'),
+            trans('shopping_category_household', default='Household'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'household'),
+            trans('shopping_category_other', default='Other'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'other')
         }
         categories = {k: v for k, v in categories.items() if v > 0}
 
@@ -388,47 +420,66 @@ def main():
             if not shopping_list:
                 flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
                 return redirect(url_for('personal.shopping.main', tab='add-items'))
-            added = 0
+            # Check for duplicate item names
+            existing_items = db.shopping_items.find({'list_id': list_id}, {'name': 1})
+            existing_names = {item['name'].lower() for item in existing_items}
+            new_items = []
             for i in range(1, 6):
                 new_name = request.form.get(f'new_item_name_{i}', '').strip()
                 if new_name:
-                    try:
-                        new_quantity = int(request.form.get(f'new_item_quantity_{i}', 1))
-                        new_price_str = request.form.get(f'new_item_price_{i}', '0')
-                        new_price = float(clean_currency(new_price_str))
-                        new_unit = request.form.get(f'new_item_unit_{i}', 'piece')
-                        new_category = request.form.get(f'new_item_category_{i}', auto_categorize_item(new_name))
-                        new_status = request.form.get(f'new_item_status_{i}', 'to_buy')
-                        new_store = request.form.get(f'new_item_store_{i}', 'Unknown')
-                        new_frequency = int(request.form.get(f'new_item_frequency_{i}', 7))
-                        if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
-                            raise ValueError('Invalid input range')
-                        new_item_data = {
-                            '_id': ObjectId(),
-                            'list_id': list_id,
-                            'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                            'session_id': session['sid'],
-                            'name': new_name,
-                            'quantity': new_quantity,
-                            'price': new_price,
-                            'unit': new_unit,
-                            'category': new_category,
-                            'status': new_status,
-                            'store': new_store,
-                            'frequency': new_frequency,
-                            'created_at': datetime.utcnow(),
-                            'updated_at': datetime.utcnow()
-                        }
-                        with db.client.start_session() as mongo_session:
-                            with mongo_session.start_transaction():
-                                db.shopping_items.insert_one(new_item_data, session=mongo_session)
-                                if current_user.is_authenticated and not is_admin():
-                                    if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
-                                        flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
-                                        return redirect(url_for('personal.shopping.main', tab='add-items', list_id=list_id))
-                        added += 1
-                    except ValueError as e:
-                        flash(trans('shopping_item_error', default='Error adding new item: ') + str(e), 'danger')
+                    new_items.append({
+                        'name': new_name,
+                        'quantity': request.form.get(f'new_item_quantity_{i}', 1),
+                        'price': request.form.get(f'new_item_price_{i}', '0'),
+                        'unit': request.form.get(f'new_item_unit_{i}', 'piece'),
+                        'category': request.form.get(f'new_item_category_{i}', auto_categorize_item(new_name)),
+                        'status': request.form.get(f'new_item_status_{i}', 'to_buy'),
+                        'store': request.form.get(f'new_item_store_{i}', 'Unknown'),
+                        'frequency': request.form.get(f'new_item_frequency_{i}', 7)
+                    })
+            for item_data in new_items:
+                if item_data['name'].lower() in existing_names:
+                    flash(trans('shopping_duplicate_item_name', default='Item name already exists in this list.'), 'danger')
+                    return redirect(url_for('personal.shopping.main', tab='add-items', list_id=list_id))
+            added = 0
+            for item_data in new_items:
+                try:
+                    new_quantity = int(item_data['quantity'])
+                    new_price = float(clean_currency(item_data['price']))
+                    new_unit = item_data['unit']
+                    new_category = item_data['category']
+                    new_status = item_data['status']
+                    new_store = item_data['store']
+                    new_frequency = int(item_data['frequency'])
+                    if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
+                        raise ValueError('Invalid input range')
+                    new_item_data = {
+                        '_id': ObjectId(),
+                        'list_id': list_id,
+                        'user_id': str(current_user.id) if current_user.is_authenticated else None,
+                        'session_id': session['sid'],
+                        'name': item_data['name'],
+                        'quantity': new_quantity,
+                        'price': new_price,
+                        'unit': new_unit,
+                        'category': new_category,
+                        'status': new_status,
+                        'store': new_store,
+                        'frequency': new_frequency,
+                        'created_at': datetime.utcnow(),
+                        'updated_at': datetime.utcnow()
+                    }
+                    with db.client.start_session() as mongo_session:
+                        with mongo_session.start_transaction():
+                            db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                            if current_user.is_authenticated and not is_admin():
+                                if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
+                                    flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
+                                    return redirect(url_for('personal.shopping.main', tab='add-items', list_id=list_id))
+                    added += 1
+                    existing_names.add(item_data['name'].lower())
+                except ValueError as e:
+                    flash(trans('shopping_item_error', default='Error adding new item: ') + str(e), 'danger')
             if added > 0:
                 items = list(db.shopping_items.find({'list_id': list_id}))
                 total_spent = sum(item['price'] * item['quantity'] for item in items)
@@ -436,6 +487,7 @@ def main():
                     {'_id': ObjectId(list_id)},
                     {'$set': {'total_spent': total_spent, 'updated_at': datetime.utcnow()}}
                 )
+                get_shopping_lists.cache_clear()
                 flash(trans('shopping_items_added', default=f'{added} item(s) added successfully!'), 'success')
                 if total_spent > shopping_list['budget']:
                     flash(trans('shopping_over_budget', default='Warning: Total spent exceeds budget by ') + format_currency(total_spent - shopping_list['budget']) + '.', 'warning')
@@ -451,24 +503,42 @@ def main():
             if not shopping_list:
                 flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
                 return redirect(url_for('personal.shopping.main', tab='dashboard'))
+            # Check for duplicate item names
+            existing_items = db.shopping_items.find({'list_id': list_id}, {'name': 1})
+            existing_names = {item['name'].lower() for item in existing_items}
+            new_items = []
+            index = 0
+            while f'items[{index}][name]' in request.form:
+                new_name = request.form.get(f'items[{index}][name]', '').strip()
+                if new_name:
+                    new_items.append({
+                        'name': new_name,
+                        'quantity': request.form.get(f'items[{index}][quantity]', 1),
+                        'price': request.form.get(f'items[{index}][price]', '0'),
+                        'unit': request.form.get(f'items[{index}][unit]', 'piece'),
+                        'category': request.form.get(f'items[{index}][category]', auto_categorize_item(new_name)),
+                        'status': request.form.get(f'items[{index}][status]', 'to_buy'),
+                        'store': request.form.get(f'items[{index}][store]', 'Unknown'),
+                        'frequency': request.form.get(f'items[{index}][frequency]', 7)
+                    })
+                index += 1
+            for item_data in new_items:
+                if item_data['name'].lower() in existing_names:
+                    flash(trans('shopping_duplicate_item_name', default='Item name already exists in this list.'), 'danger')
+                    return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
             added = 0
             try:
                 with db.client.start_session() as mongo_session:
                     with mongo_session.start_transaction():
-                        index = 0
-                        while f'items[{index}][name]' in request.form:
-                            new_name = request.form.get(f'items[{index}][name]', '').strip()
-                            if not new_name:
-                                index += 1
-                                continue
+                        for item_data in new_items:
                             try:
-                                new_quantity = int(request.form.get(f'items[{index}][quantity]', 1))
-                                new_price = float(clean_currency(request.form.get(f'items[{index}][price]', '0')))
-                                new_unit = request.form.get(f'items[{index}][unit]', 'piece')
-                                new_category = request.form.get(f'items[{index}][category]', auto_categorize_item(new_name))
-                                new_status = request.form.get(f'items[{index}][status]', 'to_buy')
-                                new_store = request.form.get(f'items[{index}][store]', 'Unknown')
-                                new_frequency = int(request.form.get(f'items[{index}][frequency]', 7))
+                                new_quantity = int(item_data['quantity'])
+                                new_price = float(clean_currency(item_data['price']))
+                                new_unit = item_data['unit']
+                                new_category = item_data['category']
+                                new_status = item_data['status']
+                                new_store = item_data['store']
+                                new_frequency = int(item_data['frequency'])
                                 
                                 if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
                                     raise ValueError('Invalid input range')
@@ -478,7 +548,7 @@ def main():
                                     'list_id': list_id,
                                     'user_id': str(current_user.id) if current_user.is_authenticated else None,
                                     'session_id': session['sid'],
-                                    'name': new_name,
+                                    'name': item_data['name'],
                                     'quantity': new_quantity,
                                     'price': new_price,
                                     'unit': new_unit,
@@ -491,13 +561,13 @@ def main():
                                 }
                                 db.shopping_items.insert_one(new_item_data, session=mongo_session)
                                 added += 1
+                                existing_names.add(item_data['name'].lower())
                                 if current_user.is_authenticated and not is_admin():
                                     if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
                                         flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
                                         return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
                             except ValueError as e:
                                 flash(trans('shopping_item_error', default='Error adding item: ') + str(e), 'danger')
-                            index += 1
                         if added > 0:
                             items = list(db.shopping_items.find({'list_id': list_id}, session=mongo_session))
                             total_spent = sum(item['price'] * item['quantity'] for item in items)
@@ -506,6 +576,7 @@ def main():
                                 {'$set': {'total_spent': total_spent, 'updated_at': datetime.utcnow(), 'status': 'saved'}},
                                 session=mongo_session
                             )
+                            get_shopping_lists.cache_clear()
                             flash(trans('shopping_list_saved', default=f'{added} item(s) saved successfully!'), 'success')
                             if total_spent > shopping_list['budget']:
                                 flash(trans('shopping_over_budget', default='Warning: Total spent exceeds budget by ') + format_currency(total_spent - shopping_list['budget']) + '.', 'warning')
@@ -573,31 +644,40 @@ def main():
         list_items = list(db.shopping_items.find({'list_id': str(lst['_id'])}))
         list_data = {
             'id': str(lst['_id']),
-            'name': lst.get('name'),
-            'budget': format_currency(lst.get('budget', 0.0)),
+            'name': lst.get('name', ''),
+            'budget': format_currency(float(lst.get('budget', 0.0))),
             'budget_raw': float(lst.get('budget', 0.0)),
-            'total_spent': format_currency(lst.get('total_spent', 0.0)),
+            'total_spent': format_currency(float(lst.get('total_spent', 0.0))),
             'total_spent_raw': float(lst.get('total_spent', 0.0)),
             'status': lst.get('status', 'active'),
             'created_at': lst.get('created_at').strftime('%Y-%m-%d') if lst.get('created_at') else 'N/A',
             'collaborators': lst.get('collaborators', []),
-            'items': [{
+            'items': []
+        }
+        if callable(lst.get('items')):
+            logger.error(f"Items field is a callable for list {lst['_id']}")
+            list_data['items'] = []
+        else:
+            list_data['items'] = [{
                 'id': str(item['_id']),
-                'name': item.get('name'),
-                'quantity': item.get('quantity', 1),
-                'price': format_currency(item.get('price', 0.0)),
+                'name': item.get('name', ''),
+                'quantity': int(item.get('quantity', 1)),
+                'price': format_currency(float(item.get('price', 0.0))),
                 'price_raw': float(item.get('price', 0.0)),
                 'unit': item.get('unit', 'piece'),
                 'category': item.get('category', 'other'),
                 'status': item.get('status', 'to_buy'),
                 'store': item.get('store', 'Unknown'),
-                'frequency': item.get('frequency', 7)
+                'frequency': int(item.get('frequency', 7))
             } for item in list_items]
-        }
         lists_dict[list_data['id']] = list_data
 
     selected_list = lists_dict.get(selected_list_id, {}) if selected_list_id else {}
-    items = selected_list.get('items', []) if selected_list else []
+    items = selected_list.get('items', []) if isinstance(selected_list.get('items'), list) else []
+    if callable(selected_list.get('items')):
+        logger.error(f"Selected list items field is a callable for list {selected_list_id}")
+        items = []
+    
     insights = []
     if selected_list and selected_list['budget_raw'] > 0:
         if selected_list['total_spent_raw'] > selected_list['budget_raw']:
@@ -655,24 +735,29 @@ def get_list_details():
     list_items = list(db.shopping_items.find({'list_id': str(list_id)}))
     selected_list = {
         'id': str(shopping_list['_id']),
-        'name': shopping_list.get('name'),
+        'name': shopping_list.get('name', ''),
         'budget': float(shopping_list.get('budget', 0.0)),
         'total_spent': float(shopping_list.get('total_spent', 0.0)),
         'status': shopping_list.get('status', 'active'),
         'created_at': shopping_list.get('created_at'),
         'collaborators': shopping_list.get('collaborators', []),
-        'items': [{
+        'items': []
+    }
+    if callable(shopping_list.get('items')):
+        logger.error(f"Items field is a callable for list {list_id}")
+        selected_list['items'] = []
+    else:
+        selected_list['items'] = [{
             'id': str(item['_id']),
-            'name': item.get('name'),
-            'quantity': item.get('quantity', 1),
+            'name': item.get('name', ''),
+            'quantity': int(item.get('quantity', 1)),
             'price': float(item.get('price', 0.0)),
             'unit': item.get('unit', 'piece'),
             'category': item.get('category', 'other'),
             'status': item.get('status', 'to_buy'),
             'store': item.get('store', 'Unknown'),
-            'frequency': item.get('frequency', 7)
+            'frequency': int(item.get('frequency', 7))
         } for item in list_items]
-    }
     
     try:
         html = render_template(
@@ -718,15 +803,37 @@ def manage_list(list_id):
                 except ValueError:
                     flash(trans('shopping_budget_invalid', default='Invalid budget value.'), 'danger')
                     return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
-                item_names = [request.form.get(f'new_item_name_{i}', '').strip().lower() for i in range(1, 6) if request.form.get(f'new_item_name_{i}', '').strip()]
-                if len(item_names) != len(set(item_names)):
-                    flash(trans('shopping_duplicate_item', default='Duplicate item name detected. Please use unique item names.'), 'warning')
-                    return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
+                # Check for duplicate item names
+                existing_items = db.shopping_items.find({'list_id': list_id}, {'name': 1})
+                existing_names = {item['name'].lower() for item in existing_items}
+                new_items = []
+                for i in range(1, 6):
+                    new_item_name = request.form.get(f'new_item_name_{i}', '').strip()
+                    if new_item_name:
+                        new_items.append({
+                            'name': new_item_name,
+                            'quantity': request.form.get(f'new_item_quantity_{i}', 1),
+                            'price': request.form.get(f'new_item_price_{i}', '0'),
+                            'unit': request.form.get(f'new_item_unit_{i}', 'piece'),
+                            'category': request.form.get(f'new_item_category_{i}', auto_categorize_item(new_item_name)),
+                            'status': request.form.get(f'new_item_status_{i}', 'to_buy'),
+                            'store': request.form.get(f'new_item_store_{i}', 'Unknown'),
+                            'frequency': request.form.get(f'new_item_frequency_{i}', 7)
+                        })
+                for item_data in new_items:
+                    if item_data['name'].lower() in existing_names:
+                        flash(trans('shopping_duplicate_item_name', default='Item name already exists in this list.'), 'danger')
+                        return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
                 added = 0
                 edited = 0
                 deleted = 0
                 with db.client.start_session() as mongo_session:
                     with mongo_session.start_transaction():
+                        # Validate status transition
+                        new_status = 'saved' if request.form.get('save_list') else shopping_list.get('status', 'active')
+                        if shopping_list['status'] == 'saved' and new_status == 'active':
+                            flash(trans('shopping_invalid_status_transition', default='Cannot change saved list back to active.'), 'danger')
+                            return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
                         if request.form.get('item_id'):
                             item_id = request.form.get('item_id')
                             if ObjectId.is_valid(item_id):
@@ -746,6 +853,9 @@ def manage_list(list_id):
                                     'frequency': int(request.form.get('edit_item_frequency', 7)),
                                     'updated_at': datetime.utcnow()
                                 }
+                                if new_item_data['name'].lower() in existing_names and new_item_data['name'].lower() != db.shopping_items.find_one({'_id': ObjectId(item_id), 'list_id': list_id}, {'name': 1})['name'].lower():
+                                    flash(trans('shopping_duplicate_item_name', default='Item name already exists in this list.'), 'danger')
+                                    return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
                                 if new_item_data['quantity'] < 1 or new_item_data['quantity'] > 1000 or new_item_data['price'] < 0 or new_item_data['price'] > 1000000 or new_item_data['frequency'] < 1 or new_item_data['frequency'] > 365:
                                     flash(trans('shopping_item_error', default='Invalid input range for edited item.'), 'danger')
                                     return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
@@ -755,45 +865,51 @@ def manage_list(list_id):
                                     session=mongo_session
                                 )
                                 edited += 1
-                        for i in range(1, 6):
-                            new_name = request.form.get(f'new_item_name_{i}', '').strip()
-                            if new_name:
-                                try:
-                                    new_quantity = int(request.form.get(f'new_item_quantity_{i}', 1))
-                                    new_price_str = request.form.get(f'new_item_price_{i}', '0')
-                                    new_price = float(clean_currency(new_price_str))
-                                    new_unit = request.form.get(f'new_item_unit_{i}', 'piece')
-                                    new_category = request.form.get(f'new_item_category_{i}', auto_categorize_item(new_name))
-                                    new_status = request.form.get(f'new_item_status_{i}', 'to_buy')
-                                    new_store = request.form.get(f'new_item_store_{i}', 'Unknown')
-                                    new_frequency = int(request.form.get(f'new_item_frequency_{i}', 7))
-                                    if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
-                                        raise ValueError('Invalid input range')
-                                    new_item_data = {
-                                        '_id': ObjectId(),
-                                        'list_id': list_id,
-                                        'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                                        'session_id': session['sid'],
-                                        'name': new_name,
-                                        'quantity': new_quantity,
-                                        'price': new_price,
-                                        'unit': new_unit,
-                                        'category': new_category,
-                                        'status': new_status,
-                                        'store': new_store,
-                                        'frequency': new_frequency,
-                                        'created_at': datetime.utcnow(),
-                                        'updated_at': datetime.utcnow()
-                                    }
-                                    db.shopping_items.insert_one(new_item_data, session=mongo_session)
-                                    added += 1
-                                except ValueError as e:
-                                    flash(trans('shopping_item_error', default='Error adding new item: ') + str(e), 'danger')
+                        for item_data in new_items:
+                            try:
+                                new_quantity = int(item_data['quantity'])
+                                new_price = float(clean_currency(item_data['price']))
+                                new_unit = item_data['unit']
+                                new_category = item_data['category']
+                                new_status = item_data['status']
+                                new_store = item_data['store']
+                                new_frequency = int(item_data['frequency'])
+                                if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
+                                    raise ValueError('Invalid input range')
+                                new_item_data = {
+                                    '_id': ObjectId(),
+                                    'list_id': list_id,
+                                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
+                                    'session_id': session['sid'],
+                                    'name': item_data['name'],
+                                    'quantity': new_quantity,
+                                    'price': new_price,
+                                    'unit': new_unit,
+                                    'category': new_category,
+                                    'status': new_status,
+                                    'store': new_store,
+                                    'frequency': new_frequency,
+                                    'created_at': datetime.utcnow(),
+                                    'updated_at': datetime.utcnow()
+                                }
+                                db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                                added += 1
+                                existing_names.add(item_data['name'].lower())
+                            except ValueError as e:
+                                flash(trans('shopping_item_error', default='Error adding new item: ') + str(e), 'danger')
                         items = list(db.shopping_items.find({'list_id': list_id}, session=mongo_session))
                         total_spent = sum(item['price'] * item['quantity'] for item in items)
                         db.shopping_lists.update_one(
                             {'_id': ObjectId(list_id)},
-                            {'$set': {'name': new_name, 'budget': new_budget, 'total_spent': total_spent, 'updated_at': datetime.utcnow()}},
+                            {
+                                '$set': {
+                                    'name': new_name,
+                                    'budget': new_budget,
+                                    'total_spent': total_spent,
+                                    'updated_at': datetime.utcnow(),
+                                    'status': new_status
+                                }
+                            },
                             session=mongo_session
                         )
                         total_operations = added + edited + deleted
@@ -805,6 +921,7 @@ def manage_list(list_id):
                             if not deduct_ficore_credits(db, current_user.id, required_credits, 'save_shopping_list_changes', list_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for changes.'), 'danger')
                                 return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
+                        get_shopping_lists.cache_clear()
                 flash(trans('shopping_changes_saved', default='Changes saved successfully!'), 'success')
                 if total_spent > new_budget and new_budget > 0:
                     flash(trans('shopping_over_budget', default='Warning: Total spent exceeds budget by ') + format_currency(total_spent - new_budget) + '.', 'warning')
@@ -827,7 +944,8 @@ def manage_list(list_id):
                         if current_user.is_authenticated and not is_admin():
                             if not deduct_ficore_credits(db, current_user.id, 0.1, 'delete_shopping_item', item_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item deletion.'), 'danger')
-                                return redirect(url_for('personal.shopping.main', tab='manage-list', link_id=list_id))
+                                return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
+                        get_shopping_lists.cache_clear()
                 flash(trans('shopping_item_deleted', default='Item deleted successfully!'), 'success')
                 return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
 
@@ -837,7 +955,7 @@ def manage_list(list_id):
             list_items = list(db.shopping_items.find({'list_id': str(lst['_id'])}))
             list_data = {
                 'id': str(lst['_id']),
-                'name': lst.get('name'),
+                'name': lst.get('name', ''),
                 'budget': float(lst.get('budget', 0.0)),
                 'budget_raw': float(lst.get('budget', 0.0)),
                 'total_spent': float(lst.get('total_spent', 0.0)),
@@ -845,25 +963,32 @@ def manage_list(list_id):
                 'status': lst.get('status', 'active'),
                 'created_at': lst.get('created_at'),
                 'collaborators': lst.get('collaborators', []),
-                'items': [{
+                'items': []
+            }
+            if callable(lst.get('items')):
+                logger.error(f"Items field is a callable for list {lst['_id']}")
+            else:
+                list_data['items'] = [{
                     'id': str(item['_id']),
-                    'name': item.get('name'),
-                    'quantity': item.get('quantity', 1),
+                    'name': item.get('name', ''),
+                    'quantity': int(item.get('quantity', 1)),
                     'price': float(item.get('price', 0.0)),
                     'price_raw': float(item.get('price', 0.0)),
                     'unit': item.get('unit', 'piece'),
                     'category': item.get('category', 'other'),
                     'status': item.get('status', 'to_buy'),
                     'store': item.get('store', 'Unknown'),
-                    'frequency': item.get('frequency', 7)
+                    'frequency': int(item.get('frequency', 7))
                 } for item in list_items]
-            }
             lists_dict[list_data['id']] = list_data
         selected_list = lists_dict.get(list_id)
         if not selected_list:
             flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
             return redirect(url_for('personal.shopping.main', tab='manage-list'))
-        items = selected_list['items']
+        items = selected_list['items'] if isinstance(selected_list['items'], list) else []
+        if callable(selected_list.get('items')):
+            logger.error(f"Selected list items field is a callable for list {list_id}")
+            items = []
         categories = {
             trans('shopping_category_fruits', default='Fruits'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'fruits'),
             trans('shopping_category_vegetables', default='Vegetables'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
@@ -934,15 +1059,21 @@ def export_list_pdf(list_id):
         items = db.shopping_items.find({'list_id': str(list_id)}).sort('created_at', -1)
         shopping_data = {
             'lists': [{
-                'name': shopping_list.get('name'),
+                'name': shopping_list.get('name', ''),
                 'budget': float(shopping_list.get('budget', 0)),
                 'total_spent': float(shopping_list.get('total_spent', 0)),
                 'collaborators': shopping_list.get('collaborators', []),
                 'created_at': shopping_list.get('created_at')
             }],
-            'items': [{
-                'name': item.get('name'),
-                'quantity': item.get('quantity', 1),
+            'items': []
+        }
+        if callable(shopping_list.get('items')):
+            logger.error(f"Items field is a callable for list {list_id}")
+            shopping_data['items'] = []
+        else:
+            shopping_data['items'] = [{
+                'name': item.get('name', ''),
+                'quantity': int(item.get('quantity', 1)),
                 'price': float(item.get('price', 0)),
                 'unit': item.get('unit', 'piece'),
                 'category': item.get('category', 'other'),
@@ -950,7 +1081,6 @@ def export_list_pdf(list_id):
                 'store': item.get('store', 'Unknown'),
                 'created_at': item.get('created_at')
             } for item in items]
-        }
         with db.client.start_session() as mongo_session:
             with mongo_session.start_transaction():
                 buffer = BytesIO()
