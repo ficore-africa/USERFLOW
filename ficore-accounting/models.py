@@ -472,23 +472,7 @@ def initialize_app_data(app):
                 }
             }
             
-            # Apply collection schemas and indexes
-            for collection_name, config in collection_schemas.items():
-                try:
-                    db_instance.command('collMod', collection_name, validator=config['validator'])
-                    logger.info(f"Applied schema to {collection_name}")
-                except Exception as e:
-                    logger.error(f"Error applying schema to {collection_name}: {str(e)}", exc_info=True)
-                    raise
-
-                for index in config.get('indexes', []):
-                    try:
-                        db_instance[collection_name].create_index(index['key'])
-                        logger.info(f"Created index for {collection_name}: {index['key']}")
-                    except Exception as e:
-                        logger.error(f"Error creating index for {collection_name}: {str(e)}", exc_info=True)
-                        raise
-            
+          
             # Initialize collections and indexes
             for collection_name, config in collection_schemas.items():
                 if collection_name == 'credit_requests' and collection_name in collections:
