@@ -8,7 +8,9 @@ document.addEventListener('DOMContentLoaded', function() {
         'amount_max': "{{ t('shopping_amount_max', default='Input cannot exceed 10 billion') | e }}",
         'amount_positive': "{{ t('shopping_amount_positive', default='Amount must be positive') | e }}",
         'quantity_max': "{{ t('shopping_quantity_max', default='Quantity cannot exceed 1000') | e }}",
-        'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}"
+        'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}",
+        'budget_required': "{{ t('shopping_budget_required', default='Budget is required') | e }}",
+        'name_required': "{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}"
     };
 
     // Local state for items in dashboard
@@ -69,11 +71,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         input.nextElementSibling.innerText = originalHelpText;
                     }
                 } else {
-                    if (numValue > 10000000000) {
+                    if (!rawValue && input.hasAttribute('required')) {
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations['budget_required'];
+                    } else if (numValue > 10000000000) {
                         numValue = 10000000000;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
-                    } else if (numValue < 0) {
+                    } else if (numValue <= 0) {
                         numValue = 0;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
@@ -82,7 +87,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         input.nextElementSibling.innerText = originalHelpText;
                     }
                 }
-                input.value = formatForDisplay(numValue, isInteger);
+                input.value = isInteger ? numValue.toString() : formatForDisplay(numValue, false);
                 updateBudgetProgress(input.closest('form'));
             });
 
@@ -143,6 +148,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 let formIsValid = true;
+
+                // Validate required fields
+                form.querySelectorAll('[required]').forEach(input => {
+                    if (!input.value.trim()) {
+                        input.classList.add('is-invalid');
+                        input.nextElementSibling.innerText = input.id.includes('name') 
+                            ? helpTextTranslations['name_required']
+                            : helpTextTranslations['budget_required'];
+                        formIsValid = false;
+                    } else {
+                        input.classList.remove('is-invalid');
+                        input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['name'];
+                    }
+                });
+
+                // Validate number inputs
                 form.querySelectorAll('.number-input').forEach(input => {
                     const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
                     let rawValue = cleanForParse(input.value);
@@ -166,16 +187,24 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
                         }
                     } else {
-                        if (numValue > 10000000000 || numValue < 0) {
+                        if (input.hasAttribute('required') && !rawValue) {
                             input.classList.add('is-invalid');
-                            input.nextElementSibling.innerText = numValue > 10000000000 ? helpTextTranslations['amount_max'] : helpTextTranslations['amount_positive'];
+                            input.nextElementSibling.innerText = helpTextTranslations['budget_required'];
+                            formIsValid = false;
+                        } else if (numValue > 10000000000) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                            formIsValid = false;
+                        } else if (numValue <= 0) {
+                            input.classList.add('is-invalid');
+                            input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                             formIsValid = false;
                         } else {
                             input.classList.remove('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['price'];
                         }
                     }
-                    input.value = isInteger ? numValue.toString() : numValue.toFixed(2);
+                    input.value = isInteger ? numValue.toString() : formatForDisplay(numValue, false);
                 });
 
                 if (form.id === 'saveListForm' || form.id === 'manageListForm') {
@@ -198,7 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
+                    const budget = parseFloat(cleanForParse(form QPform.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget | default(0) }};
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -251,23 +280,28 @@ document.addEventListener('DOMContentLoaded', function() {
                             'X-Requested-With': 'XMLHttpRequest'
                         }
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        if (!response.ok) throw new Error('Server error');
+                        return response.json();
+                    })
                     .then(data => {
                         submitButton.disabled = false;
                         submitButton.querySelector('.spinner-border')?.classList.add('d-none');
                         submitButton.querySelector('i')?.classList.remove('d-none');
-
                         if (data.success) {
-                            window.location.href = '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
+                            window.location.href = data.redirect_url || '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
                         } else {
                             const toastContainer = document.querySelector('.toast-container');
                             const toastEl = document.createElement('div');
                             toastEl.className = 'toast align-items-center text-white bg-danger border-0';
+                            let errorMsg = data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}";
+                            if (data.errors) {
+                                const fieldErrors = Object.values(data.errors).flat().join('; ');
+                                errorMsg = fieldErrors || errorMsg;
+                            }
                             toastEl.innerHTML = `
                                 <div class="d-flex">
-                                    <div class="toast-body">
-                                        ${data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}"}
-                                    </div>
+                                    <div class="toast-body">${errorMsg}</div>
                                     <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
                                 </div>
                             `;
@@ -280,7 +314,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         submitButton.disabled = false;
                         submitButton.querySelector('.spinner-border')?.classList.add('d-none');
                         submitButton.querySelector('i')?.classList.remove('d-none');
-
                         const toastContainer = document.querySelector('.toast-container');
                         const toastEl = document.createElement('div');
                         toastEl.className = 'toast align-items-center text-white bg-danger border-0';
@@ -528,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+        fetch('{{ url_for("asdasd.personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
