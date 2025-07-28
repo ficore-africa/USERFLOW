@@ -14,13 +14,11 @@ document.addEventListener('DOMContentLoaded', function() {
         'item_added': "Item added successfully!",
         'add_item_error': "Failed to add item. Please try again.",
         'edit_item_error': "Failed to save item changes. Please try again.",
+        'delete_item_error': "Failed to delete item. Please try again.",
         'table_error': "Failed to load items. Please try again.",
         'duplicate_item_name': "Item name already exists in this list.",
         'csrf_error': "Form submission failed due to a missing security token. Please refresh and try again."
     };
-
-    // Local state for items in dashboard
-    let items = [];
 
     // Helper function to show toasts
     function showToast(message, type = 'danger') {
@@ -175,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Clean budget field before submission
                 const budgetInput = form.querySelector('#list_budget');
                 if (budgetInput) {
-                    budgetInput.value = cleanForParse(budgetInput.value); // Remove commas
+                    budgetInput.value = cleanForParse(budgetInput.value);
                 }
 
                 // Validate required fields
@@ -236,11 +234,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.value = isInteger ? numValue.toString() : formatForDisplay(numValue, false);
                 });
 
-                if (form.id === 'saveListForm' || form.id === 'manageListForm') {
+                if (form.id === 'updateListForm' || form.id === 'addItemsForm' || form.id === 'saveListForm') {
                     const itemNames = [];
-                    if (form.id === 'saveListForm') {
-                        itemNames.push(...items.map(item => item.name.trim().toLowerCase()));
-                    } else {
+                    if (form.id === 'addItemsForm') {
                         form.querySelectorAll('input[name$="[name]"]').forEach(input => {
                             if (input.value.trim()) {
                                 itemNames.push(input.value.trim().toLowerCase());
@@ -256,20 +252,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('duplicateWarning')?.classList.add('d-none');
                     }
 
-                    const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
+                    const total = calculateTotalCost(form);
                     const budgetInput = form.querySelector('#list_budget');
                     const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
                     if (!budget && budgetInput && budgetInput.hasAttribute('required')) {
                         budgetInput.classList.add('is-invalid');
-                        budgetInput.nextElementSibling.innerText = helpTextTranslations['budget_required'];
+                        input.nextElementSibling.innerText = helpTextTranslations['budget_required'];
                         formIsValid = false;
                     } else if (budget <= 0 && budgetInput && budgetInput.hasAttribute('required')) {
                         budgetInput.classList.add('is-invalid');
-                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                         formIsValid = false;
                     } else if (budget > 10000000000) {
                         budgetInput.classList.add('is-invalid');
-                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
                         formIsValid = false;
                     }
 
@@ -301,79 +297,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
                     submitButton.querySelector('i')?.classList.add('d-none');
                 }
-
-                if (form.id === 'saveListForm' && formIsValid) {
-                    items.forEach((item, index) => {
-                        const itemFields = ['name', 'quantity', 'price', 'unit', 'category', 'status', 'store', 'frequency'];
-                        itemFields.forEach(field => {
-                            const input = document.createElement('input');
-                            input.type = 'hidden';
-                            input.name = `items[${index}][${field}]`;
-                            input.value = item[field] || '';
-                            form.appendChild(input);
-                        });
-                    });
-                }
             });
         });
     }
-
-    BLANK
-    // Add item to frontend state (dashboard)
-    document.getElementById('addItemSubmit')?.addEventListener('click', function() {
-        const form = document.getElementById('addItemForm');
-        if (!form) {
-            console.error('Add item form not found');
-            return;
-        }
-
-        // Validate form
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        try {
-            const item = {
-                id: 'temp_' + Date.now(),
-                name: document.getElementById('item_name').value.trim(),
-                quantity: parseInt(document.getElementById('item_quantity').value) || 1,
-                price: parseFloat(cleanForParse(document.getElementById('item_price').value)) || 0,
-                unit: document.getElementById('item_unit').value || 'unit',
-                category: document.getElementById('item_category').value || 'general',
-                status: document.getElementById('item_status').value || 'pending',
-                store: document.getElementById('item_store').value.trim() || '',
-                frequency: parseInt(document.getElementById('item_frequency').value) || 1
-            };
-
-            // Check for duplicate names
-            const itemNames = items.map(i => i.name.toLowerCase());
-            if (itemNames.includes(item.name.toLowerCase())) {
-                showToast(helpTextTranslations['duplicate_item_name'], 'danger');
-                document.getElementById('duplicateWarning').classList.remove('d-none');
-                return;
-            }
-            document.getElementById('duplicateWarning')?.classList.add('d-none');
-
-            // Add item to array
-            items.push(item);
-            updateItemsTable();
-            updateBudgetProgress(form);
-            form.reset();
-
-            // Show success toast
-            showToast(helpTextTranslations['item_added'], 'success');
-
-            // Reset form validation states
-            form.querySelectorAll('.is-invalid').forEach(input => {
-                input.classList.remove('is-invalid');
-                input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
-            });
-        } catch (error) {
-            console.error('Error adding item:', error);
-            showToast(helpTextTranslations['add_item_error'], 'danger');
-        }
-    });
 
     // Open edit modal
     window.openEditModal = function(id, name, quantity, price, unit, category, status, store, frequency) {
@@ -398,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Save edited item
     document.getElementById('saveEditItem')?.addEventListener('click', function() {
-        const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
+        const form = document.getElementById('addItemsForm');
         if (!form) {
             console.error('Form not found for saving edited item');
             showToast("Form not found. Please try again.", 'danger');
@@ -425,66 +351,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            if (form.id === 'saveListForm') {
-                const itemIndex = items.findIndex(item => item.id === id);
-                if (itemIndex === -1) {
-                    console.error('Item not found for editing:', id);
-                    showToast("Item not found. Please try again.", 'danger');
-                    return;
-                }
-
-                const itemNames = items.map(i => i.name.toLowerCase()).filter((_, i) => i !== itemIndex);
-                if (itemNames.includes(newItem.name.toLowerCase())) {
-                    showToast(helpTextTranslations['duplicate_item_name'], 'danger');
-                    document.getElementById('duplicateWarning').classList.remove('d-none');
-                    return;
-                }
-                document.getElementById('duplicateWarning')?.classList.add('d-none');
-
-                items[itemIndex] = newItem;
-                updateItemsTable();
-                updateBudgetProgress(form);
-            } else {
-                const formData = new FormData(form);
-                formData.append('action', 'edit_item');
-                formData.append('item_id', newItem.id);
-                formData.append('edit_item_name', newItem.name);
-                formData.append('edit_item_quantity', newItem.quantity);
-                formData.append('edit_item_price', newItem.price);
-                formData.append('edit_item_unit', newItem.unit);
-                formData.append('edit_item_category', newItem.category);
-                formData.append('edit_item_status', newItem.status);
-                formData.append('edit_item_store', newItem.store);
-                formData.append('edit_item_frequency', newItem.frequency);
-
-                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
-                if (!csrfToken) {
-                    console.error('CSRF token not found');
-                    showToast(helpTextTranslations['csrf_error'], 'danger');
-                    return;
-                }
-
-                fetch(form.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-Token': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.reload();
-                    } else {
-                        showToast(data.error || helpTextTranslations['edit_item_error'], 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error saving edited item:', error);
-                    showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['edit_item_error'], 'danger');
-                });
+            const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
+            if (!csrfToken) {
+                console.error('CSRF token not found');
+                showToast(helpTextTranslations['csrf_error'], 'danger');
+                return;
             }
+
+            const formData = new FormData();
+            formData.append('action', 'edit_item');
+            formData.append('item_id', newItem.id);
+            formData.append('edit_item_name', newItem.name);
+            formData.append('edit_item_quantity', newItem.quantity);
+            formData.append('edit_item_price', newItem.price);
+            formData.append('edit_item_unit', newItem.unit);
+            formData.append('edit_item_category', newItem.category);
+            formData.append('edit_item_status', newItem.status);
+            formData.append('edit_item_store', newItem.store);
+            formData.append('edit_item_frequency', newItem.frequency);
+            formData.append('csrf_token', csrfToken);
+
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    showToast(data.error || helpTextTranslations['edit_item_error'], 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving edited item:', error);
+                showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['edit_item_error'], 'danger');
+            });
 
             bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
         } catch (error) {
@@ -493,140 +399,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Delete item from frontend state (dashboard) or trigger server-side delete (manage-list)
+    // Delete item
     window.deleteItem = function(id) {
         try {
-            if (document.getElementById('manageListForm')) {
-                const form = document.querySelector(`form.delete-item-form input[name="item_id"][value="${id}"]`)?.closest('form') || document.getElementById('manageListForm');
-                if (!form) {
-                    console.error('Delete form not found for item:', id);
-                    showToast("Form not found. Please try again.", 'danger');
-                    return;
-                }
-
-                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
-                if (!csrfToken) {
-                    console.error('CSRF token not found');
-                    showToast(helpTextTranslations['csrf_error'], 'danger');
-                    return;
-                }
-
-                const formData = new FormData(form);
-                formData.append('action', 'delete_item');
-                formData.append('item_id', id);
-                formData.append('list_id', document.getElementById('list_id')?.value || '');
-
-                fetch(form.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-Token': csrfToken
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.reload();
-                    } else {
-                        showToast(data.error || "Failed to delete item. Please try again.", 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error deleting item:', error);
-                    showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to delete item. Please try again.", 'danger');
-                });
-            } else {
-                items = items.filter(item => item.id !== id);
-                updateItemsTable();
-                updateBudgetProgress(document.getElementById('saveListForm'));
+            const form = document.querySelector(`form.delete-item-form input[name="item_id"][value="${id}"]`)?.closest('form');
+            if (!form) {
+                console.error('Delete form not found for item:', id);
+                showToast(helpTextTranslations['delete_item_error'], 'danger');
+                return;
             }
+
+            const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
+            if (!csrfToken) {
+                console.error('CSRF token not found');
+                showToast(helpTextTranslations['csrf_error'], 'danger');
+                return;
+            }
+
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    showToast(data.error || helpTextTranslations['delete_item_error'], 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting item:', error);
+                showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['delete_item_error'], 'danger');
+            });
         } catch (error) {
             console.error('Error deleting item:', error);
-            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to delete item. Please try again.", 'danger');
+            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['delete_item_error'], 'danger');
         }
     };
-
-    // Update items table (dashboard)
-    function updateItemsTable() {
-        const tbody = document.getElementById('items-table-body');
-        if (!tbody) {
-            console.warn('Items table body not found, skipping table update');
-            return;
-        }
-
-        try {
-            tbody.innerHTML = '';
-            items.forEach(item => {
-                const row = document.createElement('tr');
-                row.setAttribute('data-item-id', item.id);
-                row.innerHTML = `
-                    <td>${escapeHtml(item.name)}</td>
-                    <td>${escapeHtml(item.quantity.toString())}</td>
-                    <td>${escapeHtml(formatForDisplay(item.price, false))}</td>
-                    <td>${escapeHtml(item.unit)}</td>
-                    <td>${escapeHtml(item.category)}</td>
-                    <td>${escapeHtml(item.status)}</td>
-                    <td>${escapeHtml(item.store || '')}</td>
-                    <td>${escapeHtml(item.frequency.toString())} days</td>
-                    <td>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('${escapeHtml(item.id)}', '${escapeHtml(item.name)}', ${item.quantity}, '${escapeHtml(formatForDisplay(item.price, false))}', '${escapeHtml(item.unit)}', '${escapeHtml(item.category)}', '${escapeHtml(item.status)}', '${escapeHtml(item.store || '')}', ${item.frequency})">
-                            <i class="fa-solid fa-pen-to-square"></i> Edit
-                        </button>
-                        <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('${escapeHtml(item.id)}')">
-                            <i class="fa-solid fa-trash"></i> Delete
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-
-            if (items.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="9" class="empty-state text-center">
-                            <i class="fas fa-cart-shopping fa-3x mb-3"></i>
-                            <p>Your shopping list is empty. Add items to get started!</p>
-                        </td>
-                    </tr>
-                `;
-            }
-        } catch (error) {
-            console.error('Error updating items table:', error);
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="empty-state text-center">
-                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
-                        <p>${helpTextTranslations['table_error']}</p>
-                    </td>
-                </tr>
-            `;
-        }
-    }
-
-    // Escape HTML to prevent XSS
-    function escapeHtml(unsafe) {
-        if (unsafe === null || unsafe === undefined) return '';
-        return unsafe
-            .toString()
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-
-    // Calculate total cost for frontend and backend items
-    function calculateFrontendTotal() {
-        try {
-            return items.reduce((total, item) => {
-                return total + (item.quantity * item.price);
-            }, parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0);
-        } catch (error) {
-            console.error('Error calculating frontend total:', error);
-            return 0;
-        }
-    }
 
     // Calculate total cost for manage list form
     function calculateTotalCost(form) {
@@ -654,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateBudgetProgress(form) {
         if (!form) return;
         try {
-            const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
+            const total = calculateTotalCost(form);
             const budgetInput = form.querySelector('#list_budget');
             const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
             const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
@@ -689,19 +504,17 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast('Please log in to perform this action.', 'danger');
             return;
         }
-        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'dashboard-content' : 'manage-list-details') || document.getElementById('manage-list-details');
+        const detailsDiv = document.getElementById('manage-list-details');
         if (!listId) {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
-                    <i class="fas fa-cart-shopping fa-3x mb-3"></i>
+                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                     <p>No active list selected. Please select an active list to manage.</p>
                     <a href="/personal/shopping?tab=create-list" class="btn btn-primary">
                         <i class="fa-solid fa-plus"></i> Create List
                     </a>
                 </div>
             `;
-            if (tab === 'dashboard') items = [];
-            updateItemsTable();
             return;
         }
 
@@ -728,17 +541,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success && data.html) {
                 detailsDiv.innerHTML = data.html;
-                if (tab === 'dashboard') {
-                    items = data.items || [];
-                    updateItemsTable();
-                    const budgetInput = document.getElementById('list_budget');
-                    if (budgetInput && data.budget_raw != null) {
-                        budgetInput.value = formatForDisplay(data.budget_raw, false);
-                    }
-                }
                 initializeNumberInputs();
                 initializeFormValidation();
-                updateBudgetProgress(document.getElementById(tab === 'dashboard' ? 'saveListForm' : 'manageListForm'));
+                updateBudgetProgress(document.getElementById('addItemsForm') || document.getElementById('updateListForm'));
                 document.querySelectorAll('.toast').forEach(toast => {
                     new bootstrap.Toast(toast).show();
                 });
@@ -752,10 +557,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         </a>
                     </div>
                 `;
-                if (tab === 'dashboard') {
-                    items = [];
-                    updateItemsTable();
-                }
                 showToast(data.error || "Failed to load list details. Please try again.", 'danger');
             }
         })
@@ -770,10 +571,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     </a>
                 </div>
             `;
-            if (tab === 'dashboard') {
-                items = [];
-                updateItemsTable();
-            }
             showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to load list details. Please try again.", 'danger');
         });
     };
@@ -788,17 +585,13 @@ document.addEventListener('DOMContentLoaded', function() {
         new bootstrap.Toast(toast).show();
     });
 
-    // Initialize budget progress and items table
-    updateItemsTable();
+    // Initialize budget progress and form validation
     initializeNumberInputs();
     initializeFormValidation();
 
     // Trigger load if a list is pre-selected
-    const dashboardSelect = document.getElementById('dashboard-list-select');
     const manageSelect = document.getElementById('manage-list-select');
-    if (dashboardSelect?.value) {
-        loadListDetails(dashboardSelect.value, 'dashboard');
-    } else if (manageSelect?.value) {
+    if (manageSelect?.value) {
         loadListDetails(manageSelect.value, 'manage-list');
     } else {
         loadListDetails('', 'manage-list');
