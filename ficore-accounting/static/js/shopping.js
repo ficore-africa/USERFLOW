@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', function() {
         'add_item_error': "Failed to add item. Please try again.",
         'edit_item_error': "Failed to save item changes. Please try again.",
         'table_error': "Failed to load items. Please try again.",
-        'duplicate_item_name': "Item name already exists in this list."
+        'duplicate_item_name': "Item name already exists in this list.",
+        'csrf_error': "Form submission failed due to a missing security token. Please refresh and try again."
     };
 
     // Local state for items in dashboard
@@ -166,6 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
             form.addEventListener('submit', function(e) {
                 if (window.isAuthenticatedContentBlocked) {
                     e.preventDefault();
+                    showToast('Please log in to perform this action.', 'danger');
                     return;
                 }
                 let formIsValid = true;
@@ -263,11 +265,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         formIsValid = false;
                     } else if (budget <= 0 && budgetInput && budgetInput.hasAttribute('required')) {
                         budgetInput.classList.add('is-invalid');
-                        input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                         formIsValid = false;
                     } else if (budget > 10000000000) {
                         budgetInput.classList.add('is-invalid');
-                        input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_max'];
                         formIsValid = false;
                     }
 
@@ -316,6 +318,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    BLANK
     // Add item to frontend state (dashboard)
     document.getElementById('addItemSubmit')?.addEventListener('click', function() {
         const form = document.getElementById('addItemForm');
@@ -454,13 +457,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 formData.append('edit_item_store', newItem.store);
                 formData.append('edit_item_frequency', newItem.frequency);
 
-                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
+                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
+                if (!csrfToken) {
+                    console.error('CSRF token not found');
+                    showToast(helpTextTranslations['csrf_error'], 'danger');
+                    return;
+                }
+
                 fetch(form.action, {
                     method: 'POST',
                     body: formData,
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-Token': csrfToken || ''
+                        'X-CSRF-Token': csrfToken
                     }
                 })
                 .then(response => response.json())
@@ -473,14 +482,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .catch(error => {
                     console.error('Error saving edited item:', error);
-                    showToast(helpTextTranslations['edit_item_error'], 'danger');
+                    showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['edit_item_error'], 'danger');
                 });
             }
 
             bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
         } catch (error) {
             console.error('Error saving edited item:', error);
-            showToast(helpTextTranslations['edit_item_error'], 'danger');
+            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['edit_item_error'], 'danger');
         }
     });
 
@@ -488,38 +497,45 @@ document.addEventListener('DOMContentLoaded', function() {
     window.deleteItem = function(id) {
         try {
             if (document.getElementById('manageListForm')) {
-                const form = document.querySelector(`form.validate-form input[name="item_id"][value="${id}"]`)?.closest('form');
-                if (form) {
-                    const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
-                    const formData = new FormData(form);
-                    formData.append('action', 'delete_item');
-                    formData.append('item_id', id);
-                    formData.append('list_id', document.getElementById('list_id')?.value || '');
-
-                    fetch(form.action, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-Token': csrfToken || ''
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            window.location.reload();
-                        } else {
-                            showToast(data.error || "Failed to delete item. Please try again.", 'danger');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error deleting item:', error);
-                        showToast("Failed to delete item. Please try again.", 'danger');
-                    });
-                } else {
+                const form = document.querySelector(`form.delete-item-form input[name="item_id"][value="${id}"]`)?.closest('form') || document.getElementById('manageListForm');
+                if (!form) {
                     console.error('Delete form not found for item:', id);
-                    showToast("Failed to delete item. Please try again.", 'danger');
+                    showToast("Form not found. Please try again.", 'danger');
+                    return;
                 }
+
+                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
+                if (!csrfToken) {
+                    console.error('CSRF token not found');
+                    showToast(helpTextTranslations['csrf_error'], 'danger');
+                    return;
+                }
+
+                const formData = new FormData(form);
+                formData.append('action', 'delete_item');
+                formData.append('item_id', id);
+                formData.append('list_id', document.getElementById('list_id')?.value || '');
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-Token': csrfToken
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload();
+                    } else {
+                        showToast(data.error || "Failed to delete item. Please try again.", 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting item:', error);
+                    showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to delete item. Please try again.", 'danger');
+                });
             } else {
                 items = items.filter(item => item.id !== id);
                 updateItemsTable();
@@ -527,7 +543,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error deleting item:', error);
-            showToast("Failed to delete item. Please try again.", 'danger');
+            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to delete item. Please try again.", 'danger');
         }
     };
 
@@ -669,7 +685,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load list details via AJAX
     window.loadListDetails = function(listId, tab) {
-        if (window.isAuthenticatedContentBlocked) return;
+        if (window.isAuthenticatedContentBlocked) {
+            showToast('Please log in to perform this action.', 'danger');
+            return;
+        }
         const detailsDiv = document.getElementById(tab === 'dashboard' ? 'dashboard-content' : 'manage-list-details') || document.getElementById('manage-list-details');
         if (!listId) {
             detailsDiv.innerHTML = `
@@ -755,7 +774,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 items = [];
                 updateItemsTable();
             }
-            showToast("Failed to load list details. Please try again.", 'danger');
+            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : "Failed to load list details. Please try again.", 'danger');
         });
     };
 
