@@ -750,8 +750,10 @@ def get_list_details():
     selected_list = {
         'id': str(shopping_list['_id']),
         'name': shopping_list.get('name', ''),
-        'budget': float(shopping_list.get('budget', 0.0)),
-        'total_spent': float(shopping_list.get('total_spent', 0.0)),
+        'budget': format_currency(float(shopping_list.get('budget', 0.0))),
+        'budget_raw': float(shopping_list.get('budget', 0.0)),
+        'total_spent': format_currency(float(shopping_list.get('total_spent', 0.0))),
+        'total_spent_raw': float(shopping_list.get('total_spent', 0.0)),
         'status': shopping_list.get('status', 'active'),
         'created_at': shopping_list.get('created_at'),
         'collaborators': shopping_list.get('collaborators', []),
@@ -771,7 +773,7 @@ def get_list_details():
     try:
         html = render_template(
             'personal/SHOPPING/manage_list_details.html',
-            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget']}),
+            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget_raw']}),
             item_form=ShoppingItemForm(),
             selected_list=selected_list,
             selected_list_id=list_id,
@@ -965,9 +967,9 @@ def manage_list(list_id):
             list_data = {
                 'id': str(lst['_id']),
                 'name': lst.get('name', ''),
-                'budget': float(lst.get('budget', 0.0)),
+                'budget': format_currency(float(lst.get('budget', 0.0))),
                 'budget_raw': float(lst.get('budget', 0.0)),
-                'total_spent': float(lst.get('total_spent', 0.0)),
+                'total_spent': format_currency(float(lst.get('total_spent', 0.0))),
                 'total_spent_raw': float(lst.get('total_spent', 0.0)),
                 'status': lst.get('status', 'active'),
                 'created_at': lst.get('created_at'),
@@ -976,7 +978,7 @@ def manage_list(list_id):
                     'id': str(item['_id']),
                     'name': item.get('name', ''),
                     'quantity': int(item.get('quantity', 1)),
-                    'price': float(item.get('price', 0.0)),
+                    'price': format_currency(float(item.get('price', 0.0))),
                     'price_raw': float(item.get('price', 0.0)),
                     'unit': item.get('unit', 'piece'),
                     'category': item.get('category', 'other'),
@@ -1015,7 +1017,7 @@ def manage_list(list_id):
 
         return render_template(
             'personal/SHOPPING/manage_list.html',
-            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget']}),
+            list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget_raw']}),
             item_form=ShoppingItemForm(),
             share_form=ShareListForm(),
             lists=lists_dict,
