@@ -639,7 +639,7 @@ def initialize_app_data(app):
                                 )
                                 # Store temporary password in temp_passwords collection
                                 try:
-                                    db_instance.temp_passwords.replace_one(
+                                    db_instance.temp_passwords.update_one(
                                         {'user_id': str(user['_id'])},
                                         {
                                             '_id': ObjectId(),
