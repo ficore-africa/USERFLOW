@@ -280,6 +280,7 @@ def main():
     list_form = ShoppingListForm()
     item_form = ShoppingItemForm()
     share_form = ShareListForm()
+    items_form = ShoppingItemsForm()  # New form for multiple items in manage-list tab
     db = get_mongo_db()
 
     # Check credits before rendering create-list tab
@@ -694,11 +695,17 @@ def main():
         'manage-list': 'manage_list.html'
     }
 
+    # Prepopulate list_form with selected list data for manage-list tab
+    if active_tab == 'manage-list' and selected_list:
+        list_form.name.data = selected_list.get('name', '')
+        list_form.budget.data = selected_list.get('budget_raw', 0.0)
+
     return render_template(
         f'personal/SHOPPING/{template_map[active_tab]}',
         list_form=list_form,
         item_form=item_form,
         share_form=share_form,
+        items_form=items_form,  # Pass new form for addItemsForm
         lists=lists_dict,
         selected_list=selected_list,
         selected_list_id=selected_list_id,
