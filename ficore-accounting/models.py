@@ -74,7 +74,7 @@ def initialize_app_data(app):
                                 'password_hash': {'bsonType': 'string'},
                                 'role': {'enum': ['personal', 'trader', 'agent', 'admin']},
                                 'coin_balance': {'bsonType': 'int', 'minimum': 0},
-                                'ficore_credit_balance': {'bsonType': ['int', 'double'], 'minimum': 0},
+                                'ficore_credit_balance': {'bsonType': 'int', 'minimum': 0},
                                 'language': {'enum': ['en', 'ha']},
                                 'created_at': {'bsonType': 'date'},
                                 'display_name': {'bsonType': ['string', 'null']},
@@ -664,11 +664,11 @@ def initialize_app_data(app):
                                         exc_info=True, extra={'session_id': 'no-session-id'}
                                     )
                                     raise
-                            # Round ficore_credit_balance if it's a double
+                            # Convert ficore_credit_balance to int if it's a double
                             if user.get('ficore_credit_balance', None) is not None and isinstance(user['ficore_credit_balance'], float):
-                                updates['ficore_credit_balance'] = round(float(user['ficore_credit_balance']), 2)
+                                updates['ficore_credit_balance'] = int(round(float(user['ficore_credit_balance']), 2))
                                 logger.info(
-                                    f"Rounded ficore_credit_balance to 2 decimal places for user {user['_id']}",
+                                    f"Converted ficore_credit_balance to int for user {user['_id']}",
                                     extra={'session_id': 'no-session-id'}
                                 )
                             # Apply updates if any are needed
