@@ -152,20 +152,20 @@ window.apiUrls = {
     shoppingSummary: "/personal/summaries/shopping/summary",
     ficoreBalance: "/personal/summaries/ficore_balance",
     recentActivity: "/personal/summaries/recent_activity",
-    notifications: "/personal/summaries/notifications", // Still here for now, but will be used by base.html JS
+    notifications: "/personal/summaries/notifications",
     manageShoppingLists: "/personal/shopping/main",
     manageShoppingItems: "/personal/shopping/lists/{list_id}/items",
     shareShoppingList: "/personal/shopping/lists/{list_id}/share",
     shoppingPriceHistory: "/personal/shopping/price_history/{item_name}",
     predictiveSuggestions: "/personal/shopping/suggestions",
-    requestFicoreCredits: "{{ url_for('credits.request_credits', _external=True) | e }}" // Add this for the "Add Credits" button
+    requestFicoreCredits: "{{ url_for('credits.request_credits', _external=True) | e }}"
 };
 
 let amountsVisible = true;
 let isActivityExpanded = false;
 
 function formatCurrency(value) {
-    if (value === null || value === undefined) return '0.00'; // Handle null/undefined
+    if (value === null || value === undefined) return '0.00';
     value = parseFloat(value);
     if (isNaN(value)) return '0.00';
     return value.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -190,12 +190,11 @@ function toggleAmountVisibility() {
     visibilityIcon.classList.toggle('bi-eye', amountsVisible);
     visibilityIcon.classList.toggle('bi-eye-slash', !amountsVisible);
     
-    // Add custom styling when toggled
     if (amountsVisible) {
-        visibilityIcon.style.color = '#28a745'; // Green when visible
+        visibilityIcon.style.color = '#28a745';
         visibilityIcon.style.transform = 'scale(1.1)';
     } else {
-        visibilityIcon.style.color = '#dc3545'; // Red when hidden
+        visibilityIcon.style.color = '#dc3545';
         visibilityIcon.style.transform = 'scale(1)';
     }
     
@@ -210,8 +209,8 @@ function toggleRecentActivities() {
     const viewAllButton = document.getElementById('viewAllActivities');
     
     isActivityExpanded = !isActivityExpanded;
-    limitedList.style.display = isActivityExpanded ? 'none' : 'block';
-    fullList.style.display = isActivityExpanded ? 'block' : 'none';
+    limitedList.classList.toggle('d-none', isActivityExpanded);
+    fullList.classList.toggle('d-none', !isActivityExpanded);
     viewAllButton.textContent = isActivityExpanded ? window.t('view_less', { default: 'Duba Ƙasa' }) : window.t('view_all', { default: 'Duba Duk' });
 }
 
@@ -224,7 +223,7 @@ function loadFinancialSummary() {
                 return;
             }
             const budgetStatus = document.getElementById('budgetStatus');
-            if (budgetStatus) { // Check if element exists in new structure
+            if (budgetStatus) {
                 budgetStatus.querySelector('.personal-amount-value').dataset.amount = data.totalBudget;
                 budgetStatus.querySelector('.personal-amount-value').textContent = amountsVisible ? formatCurrency(data.totalBudget) : '****';
                 budgetStatus.querySelector('.personal-status-indicator').textContent = data.totalBudget >= 0 ? window.t('on_track', { default: 'A Kan Hanya' }) : window.t('over_budget', { default: 'Fiye da Kasafin Kuɗi' });
@@ -270,7 +269,6 @@ function loadFinancialSummary() {
             console.error('Error loading shopping summary:', error);
         });
 
-    // Ficore Balance is now the main balance, ensure it's loaded first or independently
     fetch(window.apiUrls.ficoreBalance)
         .then(response => response.json())
         .then(data => {
@@ -278,7 +276,7 @@ function loadFinancialSummary() {
                 console.error('Ficore balance error:', data.error);
                 return;
             }
-            const walletBalanceElement = document.getElementById('walletBalance'); // Target the span within the main balance section
+            const walletBalanceElement = document.getElementById('walletBalance');
             if (walletBalanceElement) {
                 walletBalanceElement.dataset.amount = data.balance;
                 walletBalanceElement.textContent = amountsVisible ? formatCurrency(data.balance) : '****';
@@ -293,7 +291,6 @@ function loadRecentActivity() {
     const limitedList = document.getElementById('recentActivityListLimited');
     const fullList = document.getElementById('recentActivityListFull');
     
-    // Show loading state
     limitedList.innerHTML = `
         <div class="personal-recent-activity-item">
             <div class="personal-activity-content-placeholder">
@@ -392,14 +389,12 @@ function loadRecentActivity() {
             `;
             limitedList.innerHTML = errorHtml;
             fullList.innerHTML = errorHtml;
-            // Removed showToast as it's assumed to be handled by base.html
         });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof bootstrap === 'undefined') {
         console.error('Bootstrap JavaScript is not loaded');
-        // Removed showToast here as well
     } else {
         console.log('Bootstrap JavaScript loaded successfully');
     }
@@ -414,22 +409,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Removed topNav and bottomNav checks as these elements are assumed to be in base.html
-
     loadFinancialSummary();
     loadRecentActivity();
-    // loadNotifications() call removed, as it's assumed to be handled by base.html
 
-    // Add click animation to quick action cards and service grid items
     document.querySelectorAll('.personal-quick-action-item, .personal-service-grid-item').forEach(card => {
         card.addEventListener('click', () => {
             card.classList.add('animate-click');
             setTimeout(() => {
                 card.classList.remove('animate-click');
             }, 200);
-            // Trigger haptic feedback if supported
             if (navigator.vibrate) {
-                navigator.vibrate(50); // Short vibration
+                navigator.vibrate(50);
             }
         });
     });
