@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper function to clean input for numeric parsing
     function cleanForParse(value) {
         if (!value) return '';
-        let clean = value.replace(/,/g, '');
+        let clean = value.toString().replace(/,/g, '');
         const parts = clean.split('.');
         if (parts.length > 2) {
             clean = parts[0] + '.' + parts.slice(1).join('');
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         numValue = 365;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
-                    } else if (numValue < 0) {
+                    } else if (numValue <= 0 && input.hasAttribute('required')) {
                         numValue = 0;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         numValue = 10000000000;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
-                    } else if (numValue <= 0) {
+                    } else if (numValue <= 0 && input.hasAttribute('required')) {
                         numValue = 0;
                         input.classList.add('is-invalid');
                         input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
@@ -133,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
             input.addEventListener('paste', function(e) {
                 e.preventDefault();
                 let pasted = (e.clipboardData || window.clipboardData).getData('text');
-                let clean = pasted.replace(/[^0-9]/g, '');
+                let clean = pasted.replace(/[^0-9.]/g, '');
                 if (!clean) return;
 
                 let numValue = isInteger ? parseInt(clean) || 0 : parseFloat(clean) || 0;
@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['frequency_max'];
                             formIsValid = false;
-                        } else if (numValue < 0) {
+                        } else if (numValue <= 0 && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                             formIsValid = false;
@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.nextElementSibling.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
                         }
                     } else {
-                        if (input.hasAttribute('required') && !rawValue) {
+                        if (!rawValue && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['budget_required'];
                             formIsValid = false;
@@ -216,8 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
                             formIsValid = false;
-                        } else if (numValue <= 0) {
-                            numValue = 0;
+                        } else if (numValue <= 0 && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                             formIsValid = false;
@@ -250,7 +249,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '0')) || 0;
+                    const budgetInput = form.querySelector('#list_budget');
+                    const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
+                    if (!budget && budgetInput && budgetInput.hasAttribute('required')) {
+                        budgetInput.classList.add('is-invalid');
+                        budgetInput.nextElementSibling.innerText = helpTextTranslations['budget_required'];
+                        formIsValid = false;
+                    } else if (budget <= 0 && budgetInput && budgetInput.hasAttribute('required')) {
+                        budgetInput.classList.add('is-invalid');
+                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                        formIsValid = false;
+                    } else if (budget > 10000000000) {
+                        budgetInput.classList.add('is-invalid');
+                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                        formIsValid = false;
+                    }
+
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -339,11 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
             form.reset();
 
             // Show success toast
-            const toastEl = document.getElementById('itemAddedToast');
-            if (toastEl) {
-                toastEl.classList.remove('d-none');
-                showToast(helpTextTranslations['item_added'], 'success');
-            }
+            showToast(helpTextTranslations['item_added'], 'success');
 
             // Reset form validation states
             form.querySelectorAll('.is-invalid').forEach(input => {
@@ -450,7 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        window.location.reload(); // Reload to reflect server-side changes
+                        window.location.reload();
                     } else {
                         showToast(data.error || helpTextTranslations['edit_item_error'], 'danger');
                     }
@@ -491,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            window.location.reload(); // Reload to reflect server-side changes
+                            window.location.reload();
                         } else {
                             showToast(data.error || "Failed to delete item. Please try again.", 'danger');
                         }
@@ -505,7 +515,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     showToast("Failed to delete item. Please try again.", 'danger');
                 }
             } else {
-                // For dashboard tab, update local state
                 items = items.filter(item => item.id !== id);
                 updateItemsTable();
                 updateBudgetProgress(document.getElementById('saveListForm'));
@@ -622,7 +631,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!form) return;
         try {
             const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '0')) || 0;
+            const budgetInput = form.querySelector('#list_budget');
+            const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
             const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
             if (progressBar && budget > 0) {
                 const percentage = (total / budget * 100).toFixed(2);
@@ -639,6 +649,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 remainingElement.textContent = remaining >= 0
                     ? formatForDisplay(remaining, false)
                     : `Over by: ${formatForDisplay(-remaining, false)}`;
+            }
+            const budgetAmountElement = form.querySelector('#budget-amount') || document.getElementById('budget-amount');
+            if (budgetAmountElement) {
+                budgetAmountElement.textContent = formatForDisplay(budget, false);
             }
         } catch (error) {
             console.error('Error updating budget progress:', error);
@@ -690,6 +704,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (tab === 'dashboard') {
                     items = data.items || [];
                     updateItemsTable();
+                    const budgetInput = document.getElementById('list_budget');
+                    if (budgetInput && data.budget != null) {
+                        budgetInput.value = formatForDisplay(data.budget, false);
+                    }
                 }
                 initializeNumberInputs();
                 initializeFormValidation();
