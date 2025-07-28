@@ -171,7 +171,7 @@ class ShoppingListForm(FlaskForm):
         if budget.data is not None:
             budget.data = round(float(budget.data), 2)
 
-class ShoppingItemForm(FlaskForm):
+class ShoppingItemsForm(FlaskForm):
     name = StringField(
         trans('shopping_item_name', default='Item Name'),
         validators=[DataRequired(message=trans('shopping_item_name_required', default='Item name is required'))]
@@ -278,7 +278,7 @@ def main():
     session.modified = True
 
     list_form = ShoppingListForm()
-    item_form = ShoppingItemForm()
+    item_form = ShoppingItemsForm()
     share_form = ShareListForm()
     items_form = ShoppingItemsForm()  # New form for multiple items in manage-list tab
     db = get_mongo_db()
@@ -769,7 +769,7 @@ def get_list_details():
         html = render_template(
             'personal/SHOPPING/manage_list_details.html',
             list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget_raw']}),
-            item_form=ShoppingItemForm(),
+            item_form=ShoppingItemsForm(),
             selected_list=selected_list,
             selected_list_id=list_id,
             items=selected_list['items'],
@@ -1013,7 +1013,7 @@ def manage_list(list_id):
         return render_template(
             'personal/SHOPPING/manage_list.html',
             list_form=ShoppingListForm(data={'name': selected_list['name'], 'budget': selected_list['budget_raw']}),
-            item_form=ShoppingItemForm(),
+            item_form=ShoppingItemsForm(),
             share_form=ShareListForm(),
             lists=lists_dict,
             selected_list=selected_list,
