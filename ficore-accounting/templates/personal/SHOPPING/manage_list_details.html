@@ -20,7 +20,7 @@
             </div>
             <div class="mb-3">
                 <label for="list_budget" class="form-label">{{ t('shopping_budget', default='Budget') | e }}</label>
-                <input type="text" name="list_budget" id="list_budget" class="form-control" value="{{ selected_list.budget_raw | e }}" required>
+                <input type="number" name="list_budget" id="list_budget" class="form-control number-input" step="0.01" min="0" max="10000000000" value="{{ selected_list.budget_raw | e }}" required>
             </div>
             <button type="submit" class="btn btn-primary">{{ t('shopping_save_changes', default='Save Changes') | e }}</button>
         </form>
