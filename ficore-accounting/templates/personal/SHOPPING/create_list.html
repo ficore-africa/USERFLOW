@@ -5,22 +5,7 @@
 {% endblock %}
 
 {% block extra_head %}
-<style>
-    .toast-container {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1055;
-    }
-    .form-control-sm {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-    }
-    .dark-mode .toast {
-        background-color: #343a40;
-        color: #ffffff;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/shopping.css') | e }}">
 {% endblock %}
 
 {% block content %}
