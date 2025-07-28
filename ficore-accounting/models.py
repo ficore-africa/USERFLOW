@@ -642,11 +642,15 @@ def initialize_app_data(app):
                                     db_instance.temp_passwords.update_one(
                                         {'user_id': str(user['_id'])},
                                         {
-                                            '_id': ObjectId(),
-                                            'user_id': str(user['_id']),
-                                            'temp_password': temp_password,
-                                            'created_at': datetime.utcnow(),
-                                            'expires_at': datetime.utcnow() + timedelta(days=7)
+                                            '$set': {
+                                                'temp_password': temp_password,
+                                                'created_at': datetime.utcnow(),
+                                                'expires_at': datetime.utcnow() + timedelta(days=7)
+                                            },
+                                            '$setOnInsert': {
+                                                '_id': ObjectId(),
+                                                'user_id': str(user['_id'])
+                                            }
                                         },
                                         upsert=True
                                     )
