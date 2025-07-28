@@ -85,6 +85,7 @@
 {% block extra_scripts %}
 <script>
     window.SHOPPING_GET_LIST_DETAILS_URL = "{{ url_for('personal.shopping.get_list_details') | e }}";
+    window.CSRF_TOKEN = "{{ csrf_token() | e }}";
 </script>
 <script defer src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
 <script>
