@@ -619,7 +619,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     total += quantity * price;
                 }
             });
-            return total + parseFloat(cleanForParse(document.getElementById('total-spent')?.textContent)) || 0;
+            const totalSpentElement = form.querySelector('#total-spent') || document.getElementById('total-spent');
+            const totalSpentRaw = parseFloat(cleanForParse(totalSpentElement?.textContent)) || 0;
+            return total + totalSpentRaw;
         } catch (error) {
             console.error('Error calculating total cost:', error);
             return 0;
@@ -635,7 +637,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
             const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
             if (progressBar && budget > 0) {
-                const percentage = (total / budget * 100).toFixed(2);
+                const percentage = Math.min((total / budget * 100).toFixed(2), 100);
                 progressBar.style.width = `${percentage}%`;
                 progressBar.setAttribute('aria-valuenow', percentage);
             }
@@ -705,8 +707,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     items = data.items || [];
                     updateItemsTable();
                     const budgetInput = document.getElementById('list_budget');
-                    if (budgetInput && data.budget != null) {
-                        budgetInput.value = formatForDisplay(data.budget, false);
+                    if (budgetInput && data.budget_raw != null) {
+                        budgetInput.value = formatForDisplay(data.budget_raw, false);
                     }
                 }
                 initializeNumberInputs();
