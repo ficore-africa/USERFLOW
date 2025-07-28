@@ -5,40 +5,7 @@
 {% endblock %}
 
 {% block extra_head %}
-<style>
-    .toast-container {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1055;
-    }
-    .progress {
-        height: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    .progress-bar {
-        transition: width 0.3s ease-in-out;
-    }
-    .empty-state {
-        padding: 2rem;
-        color: #6c757d;
-    }
-    .dark-mode .empty-state {
-        color: #adb5bd;
-    }
-    .form-control-sm {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-    }
-    .dark-mode .toast {
-        background-color: #343a40;
-        color: #ffffff;
-    }
-    .edit-modal .modal-body input,
-    .edit-modal .modal-body select {
-        margin-bottom: 0.5rem;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/shopping.css') | e }}">
 {% endblock %}
 
 {% block content %}
@@ -205,17 +172,17 @@
                         </div>
                         <div id="dashboard-content">
                             {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
-                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget_raw | default(0.0)) | e }}</span></p>
-                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent_raw | default(0.0)) | e }}</span></p>
+                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ selected_list.budget | e }}</span></p>
+                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ selected_list.total_spent | e }}</span></p>
                                 <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">
                                     {% if selected_list.budget_raw is defined and selected_list.total_spent_raw is defined %}
-                                        {{ format_currency((selected_list.budget_raw | float | default(0.0)) - (selected_list.total_spent_raw | float | default(0.0))) | e }}
+                                        {{ format_currency(selected_list.budget_raw - selected_list.total_spent_raw) | e }}
                                     {% else %}
                                         {{ format_currency(0.0) | e }}
                                     {% endif %}
                                 </span></p>
                                 <div class="progress">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ ((selected_list.total_spent_raw | float | default(0.0)) / (selected_list.budget_raw | float | default(1.0)) * 100) if (selected_list.budget_raw | float | default(0.0)) > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    <div class="progress-bar" role="progressbar" style="width: {{ (selected_list.total_spent_raw / selected_list.budget_raw * 100) if selected_list.budget_raw > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ (selected_list.total_spent_raw / selected_list.budget_raw * 100) if selected_list.budget_raw > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
                                 </div>
                                 <div class="card mb-4">
                                     <div class="card-header">
@@ -328,7 +295,7 @@
                                 <div class="empty-state text-center">
                                     <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                                     <p>{{ t('shopping_no_list_selected', default='No active list selected. Please select an active list to add items.') | e }}</p>
-                                    <a href '{{ url_for('personal.shopping.main', tab='create-list') | e }}' class="btn btn-primary">
+                                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
                                         <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
                                     </a>
                                 </div>
