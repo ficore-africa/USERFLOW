@@ -74,7 +74,7 @@ def initialize_app_data(app):
                                 'password_hash': {'bsonType': 'string'},
                                 'role': {'enum': ['personal', 'trader', 'agent', 'admin']},
                                 'coin_balance': {'bsonType': 'int', 'minimum': 0},
-                                'ficore_credit_balance': {'bsonType': 'int', 'minimum': 0},
+                                'ficore_credit_balance': {'bsonType': ['int', 'double'], 'minimum': 0},
                                 'language': {'enum': ['en', 'ha']},
                                 'created_at': {'bsonType': 'date'},
                                 'display_name': {'bsonType': ['string', 'null']},
@@ -175,8 +175,8 @@ def initialize_app_data(app):
                             'required': ['user_id', 'amount', 'type', 'date'],
                             'properties': {
                                 'user_id': {'bsonType': 'string'},
-                                'amount': {'bsonType': 'int'},
-                                'type': {'enum': ['add', 'spend', 'purchase', 'admin_credit', 'create_shopping_list']},
+                                'amount': {'bsonType': ['int', 'double']},
+                                'type': {'enum': ['add', 'spend', 'purchase', 'admin_credit', 'create_shopping_list', 'initial_credit']},  # Added 'initial_credit'
                                 'ref': {'bsonType': ['string', 'null']},
                                 'date': {'bsonType': 'date'},
                                 'facilitated_by_agent': {'bsonType': ['string', 'null']},
@@ -652,7 +652,7 @@ class User:
 
 def create_user(db, user_data):
     """
-    Create a new user in the users collection.
+    Create a new user in the users collection and grant 10 Ficore Credits by default.
     
     Args:
         db: MongoDB database instance
@@ -669,13 +669,13 @@ def create_user(db, user_data):
         user_doc = {
             '_id': user_id,
             'email': user_data['email'].lower(),
-            'password_hash': user_data.get('password_hash'),
+            'password_hash': user_data['password_hash'],
             'role': user_data.get('role', 'personal'),
             'display_name': user_data.get('display_name', user_id),
             'is_admin': user_data.get('is_admin', False),
             'setup_complete': user_data.get('setup_complete', False),
             'coin_balance': user_data.get('coin_balance', 10),
-            'ficore_credit_balance': user_data.get('ficore_credit_balance', 0),
+            'ficore_credit_balance': user_data.get('ficore_credit_balance', 10.0),  # Set default to 10 FCs
             'language': user_data.get('lang', 'en'),
             'dark_mode': user_data.get('dark_mode', False),
             'created_at': user_data.get('created_at', datetime.utcnow()),
@@ -684,8 +684,22 @@ def create_user(db, user_data):
             'agent_details': user_data.get('agent_details')
         }
         
-        db.users.insert_one(user_doc)
-        logger.info(f"{trans('general_user_created', default='Created user with ID')}: {user_id}", 
+        with db.client.start_session() as session:
+            with session.start_transaction():
+                # Insert the user document
+                db.users.insert_one(user_doc, session=session)
+                
+                # Log the initial Ficore Credit transaction
+                transaction = {
+                    'user_id': user_id,
+                    'amount': 10.0,  # Initial 10 FCs
+                    'type': 'initial_credit',  # New transaction type for registration bonus
+                    'date': datetime.utcnow(),
+                    'notes': 'Initial 10 Ficore Credits granted upon registration'
+                }
+                db.ficore_credit_transactions.insert_one(transaction, session=session)
+        
+        logger.info(f"{trans('general_user_created', default='Created user with ID')}: {user_id} with 10 Ficore Credits", 
                    extra={'session_id': 'no-session-id'})
         get_user.cache_clear()
         get_user_by_email.cache_clear()
@@ -1862,7 +1876,7 @@ def deduct_ficore_credits(db, user_id, email, amount, action, ref=None):
     try:
         if amount <= 0:
             raise ValueError(f"Invalid deduction amount: {amount}")
-        
+        amount = round(float(amount), 2)        
         with db.client.start_session() as session:
             with session.start_transaction():
                 user = db.users.find_one({'_id': user_id, 'email': email.lower()}, session=session)
