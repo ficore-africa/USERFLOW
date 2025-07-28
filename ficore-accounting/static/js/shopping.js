@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '{{ selected_list.budget | default(0) }}')) || 0;
+                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '0')) || 0;
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -290,67 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.value = item[field] || '';
                             form.appendChild(input);
                         });
-                    });
-                }
-
-                if (form.id === 'createListForm') {
-                    e.preventDefault();
-                    const formData = new FormData(form);
-                    const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
-                    const submitButton = form.querySelector('#createListSubmit');
-                    if (submitButton) {
-                        submitButton.disabled = true;
-                        submitButton.querySelector('.spinner-border')?.classList.remove('d-none');
-                        submitButton.querySelector('i')?.classList.add('d-none');
-                    }
-                    fetch(form.action, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-Token': csrfToken || ''
-                        }
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (submitButton) {
-                            submitButton.disabled = false;
-                            submitButton.querySelector('.spinner-border')?.classList.add('d-none');
-                            submitButton.querySelector('i')?.classList.remove('d-none');
-                        }
-                        if (data.success) {
-                            window.location.href = data.redirect_url || '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
-                        } else {
-                            let errorMsg = data.error || "Failed to create list. Please try again.";
-                            if (data.errors) {
-                                Object.keys(data.errors).forEach(field => {
-                                    const input = form.querySelector(`[name="${field}"]`);
-                                    if (input) {
-                                        input.classList.add('is-invalid');
-                                        const feedback = input.nextElementSibling;
-                                        if (feedback && feedback.classList.contains('invalid-feedback')) {
-                                            feedback.innerText = data.errors[field].join(', ');
-                                        }
-                                    }
-                                });
-                                errorMsg = Object.values(data.errors).flat().join('; ') || errorMsg;
-                            }
-                            showToast(errorMsg, 'danger');
-                            const firstInvalid = form.querySelector('.is-invalid');
-                            if (firstInvalid) {
-                                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                firstInvalid.focus();
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error creating list:', error);
-                        if (submitButton) {
-                            submitButton.disabled = false;
-                            submitButton.querySelector('.spinner-border')?.classList.add('d-none');
-                            submitButton.querySelector('i')?.classList.remove('d-none');
-                        }
-                        showToast("Failed to create list. Please try again.", 'danger');
                     });
                 }
             });
@@ -401,8 +340,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Show success toast
             const toastEl = document.getElementById('itemAddedToast');
-            toastEl.classList.remove('d-none');
-            showToast(helpTextTranslations['item_added'], 'success');
+            if (toastEl) {
+                toastEl.classList.remove('d-none');
+                showToast(helpTextTranslations['item_added'], 'success');
+            }
 
             // Reset form validation states
             form.querySelectorAll('.is-invalid').forEach(input => {
@@ -418,7 +359,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Open edit modal
     window.openEditModal = function(id, name, quantity, price, unit, category, status, store, frequency) {
         try {
-            document.getElementById('edit-item-index').value = id;
+            document.getElementById('edit-item-id').value = id;
             document.getElementById('edit-item-name').value = name;
             document.getElementById('edit-item-quantity').value = quantity;
             document.getElementById('edit-item-price').value = formatForDisplay(price, false);
@@ -436,7 +377,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // Save edited item Cina
+    // Save edited item
     document.getElementById('saveEditItem')?.addEventListener('click', function() {
         const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
         if (!form) {
@@ -446,9 +387,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
-            const index = document.getElementById('edit-item-index').value;
+            const id = document.getElementById('edit-item-id').value;
             const newItem = {
-                id: index,
+                id: id,
                 name: document.getElementById('edit-item-name').value.trim(),
                 quantity: parseInt(document.getElementById('edit-item-quantity').value) || 1,
                 price: parseFloat(cleanForParse(document.getElementById('edit-item-price').value)) || 0,
@@ -459,10 +400,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 frequency: parseInt(document.getElementById('edit-item-frequency').value) || 1
             };
 
+            if (!newItem.name.trim()) {
+                document.getElementById('edit-item-name').classList.add('is-invalid');
+                document.getElementById('edit-item-name').nextElementSibling.innerText = helpTextTranslations['name_required'];
+                return;
+            }
+
             if (form.id === 'saveListForm') {
-                const itemIndex = items.findIndex(item => item.id === index);
+                const itemIndex = items.findIndex(item => item.id === id);
                 if (itemIndex === -1) {
-                    console.error('Item not found for editing:', index);
+                    console.error('Item not found for editing:', id);
                     showToast("Item not found. Please try again.", 'danger');
                     return;
                 }
@@ -479,30 +426,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateItemsTable();
                 updateBudgetProgress(form);
             } else {
-                const hiddenInputs = [
-                    { name: `edit_item_id`, value: newItem.id },
-                    { name: `edit_item_name`, value: newItem.name },
-                    { name: `edit_item_quantity`, value: newItem.quantity },
-                    { name: `edit_item_price`, value: newItem.price },
-                    { name: `edit_item_unit`, value: newItem.unit },
-                    { name: `edit_item_category`, value: newItem.category },
-                    { name: `edit_item_status`, value: newItem.status },
-                    { name: `edit_item_store`, value: newItem.store },
-                    { name: `edit_item_frequency`, value: newItem.frequency }
-                ];
+                const formData = new FormData(form);
+                formData.append('action', 'edit_item');
+                formData.append('item_id', newItem.id);
+                formData.append('edit_item_name', newItem.name);
+                formData.append('edit_item_quantity', newItem.quantity);
+                formData.append('edit_item_price', newItem.price);
+                formData.append('edit_item_unit', newItem.unit);
+                formData.append('edit_item_category', newItem.category);
+                formData.append('edit_item_status', newItem.status);
+                formData.append('edit_item_store', newItem.store);
+                formData.append('edit_item_frequency', newItem.frequency);
 
-                hiddenInputs.forEach(field => {
-                    let input = form.querySelector(`input[name="${field.name}"]`);
-                    if (!input) {
-                        input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = field.name;
-                        form.appendChild(input);
+                const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-Token': csrfToken || ''
                     }
-                    input.value = field.value || '';
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload(); // Reload to reflect server-side changes
+                    } else {
+                        showToast(data.error || helpTextTranslations['edit_item_error'], 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving edited item:', error);
+                    showToast(helpTextTranslations['edit_item_error'], 'danger');
                 });
-
-                form.submit();
             }
 
             bootstrap.Modal.getInstance(document.getElementById('editItemModal')).hide();
@@ -516,14 +472,38 @@ document.addEventListener('DOMContentLoaded', function() {
     window.deleteItem = function(id) {
         try {
             if (document.getElementById('manageListForm')) {
-                // For manage-list tab, submit delete request to server
-                const form = document.getElementById('manageListForm');
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'delete_item_id';
-                input.value = id;
-                form.appendChild(input);
-                form.submit();
+                const form = document.querySelector(`form.validate-form input[name="item_id"][value="${id}"]`)?.closest('form');
+                if (form) {
+                    const csrfToken = form.querySelector('input[name="csrf_token"]')?.value;
+                    const formData = new FormData(form);
+                    formData.append('action', 'delete_item');
+                    formData.append('item_id', id);
+                    formData.append('list_id', document.getElementById('list_id')?.value || '');
+
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-Token': csrfToken || ''
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            window.location.reload(); // Reload to reflect server-side changes
+                        } else {
+                            showToast(data.error || "Failed to delete item. Please try again.", 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting item:', error);
+                        showToast("Failed to delete item. Please try again.", 'danger');
+                    });
+                } else {
+                    console.error('Delete form not found for item:', id);
+                    showToast("Failed to delete item. Please try again.", 'danger');
+                }
             } else {
                 // For dashboard tab, update local state
                 items = items.filter(item => item.id !== id);
@@ -548,6 +528,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tbody.innerHTML = '';
             items.forEach(item => {
                 const row = document.createElement('tr');
+                row.setAttribute('data-item-id', item.id);
                 row.innerHTML = `
                     <td>${escapeHtml(item.name)}</td>
                     <td>${escapeHtml(item.quantity.toString())}</td>
@@ -573,7 +554,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="9" class="empty-state text-center">
-                            <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
+                            <i class="fas fa-cart-shopping fa-3x mb-3"></i>
                             <p>Your shopping list is empty. Add items to get started!</p>
                         </td>
                     </tr>
@@ -641,7 +622,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!form) return;
         try {
             const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '{{ selected_list.budget | default(0) }}')) || 0;
+            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '0')) || 0;
             const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
             if (progressBar && budget > 0) {
                 const percentage = (total / budget * 100).toFixed(2);
@@ -667,12 +648,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load list details via AJAX
     window.loadListDetails = function(listId, tab) {
         if (window.isAuthenticatedContentBlocked) return;
-        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'dashboard-content' : 'manage-list-details') || document.getElementById('dashboard-content');
+        const detailsDiv = document.getElementById(tab === 'dashboard' ? 'dashboard-content' : 'manage-list-details') || document.getElementById('manage-list-details');
         if (!listId) {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
-                    <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                    <p>No list selected. Please select a list to manage.</p>
+                    <i class="fas fa-cart-shopping fa-3x mb-3"></i>
+                    <p>No active list selected. Please select an active list to manage.</p>
                     <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
                         <i class="fa-solid fa-plus"></i> Create List
                     </a>
@@ -774,9 +755,8 @@ document.addEventListener('DOMContentLoaded', function() {
         loadListDetails(dashboardSelect.value, 'dashboard');
     } else if (manageSelect?.value) {
         loadListDetails(manageSelect.value, 'manage-list');
-    } else if (dashboardSelect) {
-        // If no list is pre-selected, ensure empty state is shown
-        loadListDetails('', 'dashboard');
+    } else {
+        loadListDetails('', 'manage-list');
     }
 
     // Tab persistence with sessionStorage
@@ -785,7 +765,6 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.setItem('activeShoppingTab', activeTab);
     }
 
-    // Trace Cina
     // Re-enable buttons on page load
     document.querySelectorAll('button[type="submit"]').forEach(button => {
         button.disabled = false;
