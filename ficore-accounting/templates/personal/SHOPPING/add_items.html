@@ -200,119 +200,120 @@
                         </div>
                         <div id="dashboard-content">
                             {% if selected_list and selected_list.id and selected_list.status != 'saved' %}
-                                <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget) | e }}</span></p>
-                                <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent) | e }}</span></p>
-                                <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">{{ format_currency(selected_list.budget - selected_list.total_spent) | e }}</span></p>
-                                <div class="progress">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h6><i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item to List') | e }}</h6>
+                                <form id="saveListForm" method="POST" action="{{ url_for('personal.shopping.main', tab='add-items') | e }}" class="validate-form">
+                                    {{ list_form.csrf_token }}
+                                    <input type="hidden" name="action" value="save_list">
+                                    <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
+                                    <input type="hidden" name="budget" id="list_budget" class="number-input" value="{{ selected_list.budget | float | default(0.0) }}">
+                                    <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ format_currency(selected_list.budget) | e }}</span></p>
+                                    <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ format_currency(selected_list.total_spent) | e }}</span></p>
+                                    <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">{{ format_currency(selected_list.budget - selected_list.total_spent) | e }}</span></p>
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" style="width: {{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}%" id="budget-progress" aria-valuenow="{{ (selected_list.total_spent / selected_list.budget * 100) if selected_list.budget > 0 else 0 }}" aria-valuemin="0" aria-valuemax="100"></div>
                                     </div>
-                                    <div class="card-body">
-                                        <form id="addItemForm" class="validate-form">
-                                            <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_name" class="form-label">{{ t('general_item_name', default='Item Name') | e }}</label>
-                                                    <input type="text" id="item_name" class="form-control" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
-                                                    <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_quantity" class="form-label">{{ t('general_quantity', default='Quantity') | e }}</label>
-                                                    <input type="number" id="item_quantity" class="form-control number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" value="1" required>
-                                                    <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
-                                                    <input type="text" id="item_price" class="form-control number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
-                                                    <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_unit" class="form-label">{{ t('general_unit', default='Unit') | e }}</label>
-                                                    <select id="item_unit" class="form-control" required>
-                                                        {% for value, label in item_form.unit.choices %}
-                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_store" class="form-label">{{ t('general_store', default='Store') | e }}</label>
-                                                    <input type="text" id="item_store" class="form-control" placeholder="{{ t('shopping_store_placeholder', default='e.g., Shoprite') | e }}">
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_category" class="form-label">{{ t('general_category', default='Category') | e }}</label>
-                                                    <select id="item_category" class="form-control" required>
-                                                        {% for value, label in item_form.category.choices %}
-                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_status" class="form-label">{{ t('general_status', default='Status') | e }}</label>
-                                                    <select id="item_status" class="form-control" required>
-                                                        {% for value, label in item_form.status.choices %}
-                                                            <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label for="item_frequency" class="form-label">{{ t('general_frequency', default='Frequency') | e }}</label>
-                                                    <input type="number" id="item_frequency" class="form-control number-input" placeholder="{{ t('shopping_frequency_placeholder', default='e.g., 7') | e }}" min="1" max="365" value="7">
-                                                    <small class="form-text text-muted">{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}</small>
-                                                </div>
-                                            </div>
-                                            <button type="button" class="btn btn-primary" id="addItemSubmit">
-                                                <i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item') | e }}
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-striped" id="items-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>{{ t('general_item_name', default='Item Name') | e }}</th>
-                                                        <th>{{ t('general_quantity', default='Quantity') | e }}</th>
-                                                        <th>{{ t('general_price', default='Price') | e }}</th>
-                                                        <th>{{ t('general_unit', default='Unit') | e }}</th>
-                                                        <th>{{ t('general_category', default='Category') | e }}</th>
-                                                        <th>{{ t('general_status', default='Status') | e }}</th>
-                                                        <th>{{ t('general_store', default='Store') | e }}</th>
-                                                        <th>{{ t('general_frequency', default='Frequency') | e }}</th>
-                                                        <th>{{ t('general_actions', default='Actions') | e }}</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="items-table-body">
-                                                </tbody>
-                                            </table>
+                                    <div class="card mb-4">
+                                        <div class="card-header">
+                                            <h6><i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item to List') | e }}</h6>
                                         </div>
-                                        <div class="mt-3">
-                                            <form method="POST" action="{{ url_for('personal.shopping.main', tab='add-items') | e }}" class="d-inline validate-form" id="saveListForm">
-                                                <input type="hidden" name="action" value="save_list">
+                                        <div class="card-body">
+                                            <form id="addItemForm" class="validate-form">
                                                 <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                                {{ list_form.csrf_token }}
-                                                <button type="submit" class="btn btn-primary" id="saveListSubmit">
-                                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                                                    <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_name" class="form-label">{{ t('general_item_name', default='Item Name') | e }}</label>
+                                                        <input type="text" id="item_name" class="form-control" placeholder="{{ t('shopping_item_name_placeholder', default='e.g., Milk') | e }}" required>
+                                                        <div class="invalid-feedback">{{ t('shopping_item_name_invalid', default='Please enter a valid item name') | e }}</div>
+                                                    </div>
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_quantity" class="form-label">{{ t('general_quantity', default='Quantity') | e }}</label>
+                                                        <input type="number" id="item_quantity" class="form-control number-input" placeholder="{{ t('shopping_quantity_placeholder', default='e.g., 2') | e }}" min="1" max="1000" value="1" required>
+                                                        <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
+                                                    </div>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
+                                                        <input type="text" id="item_price" class="form-control number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
+                                                        <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
+                                                    </div>
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_unit" class="form-label">{{ t('general_unit', default='Unit') | e }}</label>
+                                                        <select id="item_unit" class="form-control" required>
+                                                            {% for value, label in item_form.unit.choices %}
+                                                                <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_store" class="form-label">{{ t('general_store', default='Store') | e }}</label>
+                                                        <input type="text" id="item_store" class="form-control" placeholder="{{ t('shopping_store_placeholder', default='e.g., Shoprite') | e }}">
+                                                    </div>
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_category" class="form-label">{{ t('general_category', default='Category') | e }}</label>
+                                                        <select id="item_category" class="form-control" required>
+                                                            {% for value, label in item_form.category.choices %}
+                                                                <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_status" class="form-label">{{ t('general_status', default='Status') | e }}</label>
+                                                        <select id="item_status" class="form-control" required>
+                                                            {% for value, label in item_form.status.choices %}
+                                                                <option value="{{ value | e }}">{{ t(value, default=label) | e }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6 mb-3">
+                                                        <label for="item_frequency" class="form-label">{{ t('general_frequency', default='Frequency') | e }}</label>
+                                                        <input type="number" id="item_frequency" class="form-control number-input" placeholder="{{ t('shopping_frequency_placeholder', default='e.g., 7') | e }}" min="1" max="365" value="7">
+                                                        <small class="form-text text-muted">{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}</small>
+                                                    </div>
+                                                </div>
+                                                <button type="button" class="btn btn-primary" id="addItemSubmit">
+                                                    <i class="fa-solid fa-cart-plus"></i> {{ t('shopping_add_item', default='Add Item') | e }}
                                                 </button>
                                             </form>
                                         </div>
                                     </div>
-                                </div>
+
+                                    <div class="card mb-4">
+                                        <div class="card-header">
+                                            <h6><i class="fa-solid fa-list"></i> {{ t('shopping_items', default='Items') | e }}</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="table-responsive">
+                                                <table class="table table-striped" id="items-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>{{ t('general_item_name', default='Item Name') | e }}</th>
+                                                            <th>{{ t('general_quantity', default='Quantity') | e }}</th>
+                                                            <th>{{ t('general_price', default='Price') | e }}</th>
+                                                            <th>{{ t('general_unit', default='Unit') | e }}</th>
+                                                            <th>{{ t('general_category', default='Category') | e }}</th>
+                                                            <th>{{ t('general_status', default='Status') | e }}</th>
+                                                            <th>{{ t('general_store', default='Store') | e }}</th>
+                                                            <th>{{ t('general_frequency', default='Frequency') | e }}</th>
+                                                            <th>{{ t('general_actions', default='Actions') | e }}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="items-table-body">
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div class="mt-3">
+                                                <button type="submit" class="btn btn-primary" id="saveListSubmit">
+                                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                                    <i class="fa-solid fa-floppy-disk"></i> {{ t('shopping_save_list', default='Save List') | e }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </form>
                             {% else %}
                                 <div class="empty-state text-center">
                                     <i class="fas fa-cart-shopping fa-3x mb-3"></i>
