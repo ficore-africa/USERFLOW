@@ -49,33 +49,47 @@ def auto_categorize_item(item_name):
 
 def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_session=None):
     try:
+        amount = int(amount * 100) / 100  # Convert to int-friendly value (e.g., 0.1 -> 10/100)
         if amount <= 0:
             logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}",
-                       extra={'session_id': session.get('sid', 'no-session-id')})
+                        extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
             return False
         user = db.users.find_one({'_id': user_id}, session=mongo_session)
         if not user:
             logger.error(f"User {user_id} not found for credit deduction, action: {action}",
-                       extra={'session_id': session.get('sid', 'no-session-id')})
+                        extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
             return False
         current_balance = user.get('ficore_credit_balance', 0)
         if current_balance < amount:
             logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}, action: {action}",
-                         extra={'session_id': session.get('sid', 'no-session-id')})
+                         extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
             return False
         session_to_use = mongo_session if mongo_session else db.client.start_session()
         owns_session = not mongo_session
-        try:
-            with session_to_use.start_transaction() if not mongo_session else nullcontext():
-                result = db.users.update_one(
-                    {'_id': user_id},
-                    {'$inc': {'ficore_credit_balance': -amount}},
-                    session=session_to_use
-                )
-                if result.modified_count == 0:
-                    logger.error(f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified",
-                               extra={'session_id': session.get('sid', 'no-session-id')})
-                    db.ficore_credit_transactions.insert_one({
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with session_to_use.start_transaction() if not mongo_session else nullcontext():
+                    result = db.users.update_one(
+                        {'_id': user_id},
+                        [{'$set': {'ficore_credit_balance': {'$toInt': {'$subtract': ['$ficore_credit_balance', amount]}}}}],
+                        session=session_to_use
+                    )
+                    if result.modified_count == 0:
+                        logger.error(f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified",
+                                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                        db.ficore_credit_transactions.insert_one({
+                            '_id': ObjectId(),
+                            'user_id': user_id,
+                            'action': action,
+                            'amount': -amount,
+                            'item_id': str(item_id) if item_id else None,
+                            'timestamp': datetime.utcnow(),
+                            'session_id': session.get('sid', 'no-session-id'),
+                            'status': 'failed'
+                        }, session=session_to_use)
+                        raise ValueError(f"Failed to update user balance for {user_id}")
+                    transaction = {
                         '_id': ObjectId(),
                         'user_id': user_id,
                         'action': action,
@@ -83,33 +97,43 @@ def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_sessi
                         'item_id': str(item_id) if item_id else None,
                         'timestamp': datetime.utcnow(),
                         'session_id': session.get('sid', 'no-session-id'),
-                        'status': 'failed'
+                        'status': 'completed'
+                    }
+                    db.ficore_credit_transactions.insert_one(transaction, session=session_to_use)
+                    db.audit_logs.insert_one({
+                        'admin_id': 'system',
+                        'action': f'deduct_ficore_credits_{action}',
+                        'details': {'user_id': user_id, 'amount': amount, 'item_id': str(item_id) if item_id else None},
+                        'timestamp': datetime.utcnow()
                     }, session=session_to_use)
-                    raise ValueError(f"Failed to update user balance for {user_id}")
-                transaction = {
-                    '_id': ObjectId(),
-                    'user_id': user_id,
-                    'action': action,
-                    'amount': -amount,
-                    'item_id': str(item_id) if item_id else None,
-                    'timestamp': datetime.utcnow(),
-                    'session_id': session.get('sid', 'no-session-id'),
-                    'status': 'completed'
-                }
-                db.ficore_credit_transactions.insert_one(transaction, session=session_to_use)
-            logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}",
-                      extra={'session_id': session.get('sid', 'no-session-id')})
-            return True
-        except (ValueError, errors.PyMongoError) as e:
-            logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
-                       exc_info=True, extra={'session_id': session.get('sid', 'no-session-id')})
-            return False
-        finally:
-            if owns_session:
-                session_to_use.end_session()
+                    if owns_session:
+                        session_to_use.commit_transaction()
+                    logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}",
+                               extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                    return True
+            except errors.OperationFailure as e:
+                if "TransientTransactionError" in e.details.get("errorLabels", []):
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Retrying transaction for user {user_id}, action: {action}, attempt {attempt + 1}",
+                                     extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                        continue
+                logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
+                            exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                if owns_session:
+                    session_to_use.abort_transaction()
+                return False
+            except (ValueError, errors.PyMongoError) as e:
+                logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
+                            exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                if owns_session:
+                    session_to_use.abort_transaction()
+                return False
+            finally:
+                if owns_session:
+                    session_to_use.end_session()
     except Exception as e:
         logger.error(f"Unexpected error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}",
-                   exc_info=True, extra={'session_id': session.get('sid', 'no-session-id')})
+                    exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
         return False
 
 def custom_login_required(f):
@@ -539,10 +563,8 @@ def main():
                                 new_status = item_data['status']
                                 new_store = item_data['store']
                                 new_frequency = int(item_data['frequency'])
-                                
                                 if new_quantity < 1 or new_quantity > 1000 or new_price < 0 or new_price > 1000000 or new_frequency < 1 or new_frequency > 365:
                                     raise ValueError('Invalid input range')
-                                
                                 new_item_data = {
                                     '_id': ObjectId(),
                                     'list_id': list_id,
