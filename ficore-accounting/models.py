@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pymongo import ASCENDING, DESCENDING
 import os
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, DuplicateKeyError, OperationFailure
@@ -176,7 +176,7 @@ def initialize_app_data(app):
                             'properties': {
                                 'user_id': {'bsonType': 'string'},
                                 'amount': {'bsonType': ['int', 'double']},
-                                'type': {'enum': ['add', 'spend', 'purchase', 'admin_credit', 'create_shopping_list', 'initial_credit']},  # Added 'initial_credit'
+                                'type': {'enum': ['add', 'spend', 'purchase', 'admin_credit', 'create_shopping_list', 'initial_credit']},
                                 'ref': {'bsonType': ['string', 'null']},
                                 'date': {'bsonType': 'date'},
                                 'facilitated_by_agent': {'bsonType': ['string', 'null']},
@@ -469,10 +469,28 @@ def initialize_app_data(app):
                         }
                     },
                     'indexes': []                      
+                },
+                'temp_passwords': {
+                    'validator': {
+                        '$jsonSchema': {
+                            'bsonType': 'object',
+                            'required': ['user_id', 'temp_password', 'created_at'],
+                            'properties': {
+                                '_id': {'bsonType': 'objectId'},
+                                'user_id': {'bsonType': 'string'},
+                                'temp_password': {'bsonType': 'string'},
+                                'created_at': {'bsonType': 'date'},
+                                'expires_at': {'bsonType': ['date', 'null']}
+                            }
+                        }
+                    },
+                    'indexes': [
+                        {'key': [('user_id', ASCENDING)], 'unique': True},
+                        {'key': [('expires_at', ASCENDING)], 'expireAfterSeconds': 604800}  # 7 days
+                    ]
                 }
             }
-            
-          
+                
             # Initialize collections and indexes
             for collection_name, config in collection_schemas.items():
                 if collection_name == 'credit_requests' and collection_name in collections:
@@ -594,6 +612,98 @@ def initialize_app_data(app):
                                                 exc_info=True, extra={'session_id': 'no-session-id'})
                                     raise
             
+            # Fix existing user documents in a single pass, only if not already applied
+            if 'users' in collections:
+                try:
+                    # Check if user fixes have already been applied
+                    fix_flag = db_instance.system_config.find_one({'_id': 'user_fixes_applied'})
+                    if fix_flag and fix_flag.get('value') is True:
+                        logger.info("User fixes already applied, skipping.", extra={'session_id': 'no-session-id'})
+                    else:
+                        # Query users needing either a missing password_hash or a double ficore_credit_balance
+                        users_to_fix = db_instance.users.find({
+                            '$or': [
+                                {'password_hash': {'$exists': False}},
+                                {'ficore_credit_balance': {'$type': 'double'}}
+                            ]
+                        })
+                        for user in users_to_fix:
+                            updates = {}
+                            # Fix missing password_hash, log, and store temporary password for admin
+                            if 'password_hash' not in user:
+                                temp_password = str(uuid.uuid4())
+                                updates['password_hash'] = generate_password_hash(temp_password)
+                                logger.info(
+                                    f"Added password_hash for user {user['_id']}. Temporary password: {temp_password} (for admin use only)",
+                                    extra={'session_id': 'no-session-id'}
+                                )
+                                # Store temporary password in temp_passwords collection
+                                try:
+                                    db_instance.temp_passwords.replace_one(
+                                        {'user_id': str(user['_id'])},
+                                        {
+                                            '_id': ObjectId(),
+                                            'user_id': str(user['_id']),
+                                            'temp_password': temp_password,
+                                            'created_at': datetime.utcnow(),
+                                            'expires_at': datetime.utcnow() + timedelta(days=7)
+                                        },
+                                        upsert=True
+                                    )
+                                    logger.info(
+                                        f"Stored temporary password for user {user['_id']} in temp_passwords collection",
+                                        extra={'session_id': 'no-session-id'}
+                                    )
+                                except Exception as e:
+                                    logger.error(
+                                        f"Failed to store temporary password for user {user['_id']}: {str(e)}",
+                                        exc_info=True, extra={'session_id': 'no-session-id'}
+                                    )
+                                    raise
+                            # Round ficore_credit_balance if it's a double
+                            if user.get('ficore_credit_balance', None) is not None and isinstance(user['ficore_credit_balance'], float):
+                                updates['ficore_credit_balance'] = round(float(user['ficore_credit_balance']), 2)
+                                logger.info(
+                                    f"Rounded ficore_credit_balance to 2 decimal places for user {user['_id']}",
+                                    extra={'session_id': 'no-session-id'}
+                                )
+                            # Apply updates if any are needed
+                            if updates:
+                                db_instance.users.update_one(
+                                    {'_id': user['_id']},
+                                    {'$set': updates}
+                                )
+                        
+                        # Mark fixes as applied in system_config
+                        try:
+                            db_instance.system_config.update_one(
+                                {'_id': 'user_fixes_applied'},
+                                {'$set': {'value': True}},
+                                upsert=True
+                            )
+                            logger.info("Marked user fixes as applied in system_config", extra={'session_id': 'no-session-id'})
+                        except Exception as e:
+                            logger.error(f"Failed to mark user fixes as applied: {str(e)}", 
+                                        exc_info=True, extra={'session_id': 'no-session-id'})
+                            raise
+                
+                    # Optionally, convert ficore_credit_balance to int if decimals are not allowed
+                    # Uncomment the following block if you want integer credits
+                    """
+                    users_to_fix = db_instance.users.find({'ficore_credit_balance': {'$type': 'double'}})
+                    for user in users_to_fix:
+                        db_instance.users.update_one(
+                            {'_id': user['_id']},
+                            {'$set': {'ficore_credit_balance': int(user['ficore_credit_balance'])}}
+                        )
+                        logger.info(f"Converted ficore_credit_balance to int for user {user['_id']}", 
+                                   extra={'session_id': 'no-session-id'})
+                    """
+                except Exception as e:
+                    logger.error(f"Failed to fix user documents: {str(e)}", 
+                                exc_info=True, extra={'session_id': 'no-session-id'})
+                    raise
+            
             # Initialize agents
             agents_collection = db_instance.agents
             if agents_collection.count_documents({}) == 0:
@@ -651,20 +761,11 @@ class User:
         return getattr(self, key, default)
 
 def create_user(db, user_data):
-    """
-    Create a new user in the users collection and grant 10 Ficore Credits by default.
-    
-    Args:
-        db: MongoDB database instance
-        user_data: Dictionary containing user information
-    
-    Returns:
-        User: Created user object
-    """
     try:
         user_id = user_data.get('username', user_data['email'].split('@')[0]).lower()
-        if 'password' in user_data:
-            user_data['password_hash'] = generate_password_hash(user_data['password'])
+        if 'password' not in user_data:
+            user_data['password'] = str(uuid.uuid4())  # Generate a random temporary password
+        user_data['password_hash'] = generate_password_hash(user_data['password'])
         
         user_doc = {
             '_id': user_id,
@@ -675,7 +776,7 @@ def create_user(db, user_data):
             'is_admin': user_data.get('is_admin', False),
             'setup_complete': user_data.get('setup_complete', False),
             'coin_balance': user_data.get('coin_balance', 10),
-            'ficore_credit_balance': user_data.get('ficore_credit_balance', 10.0),  # Set default to 10 FCs
+            'ficore_credit_balance': user_data.get('ficore_credit_balance', 10.0),  # Keep as 10.0 for double, or 10 for int
             'language': user_data.get('lang', 'en'),
             'dark_mode': user_data.get('dark_mode', False),
             'created_at': user_data.get('created_at', datetime.utcnow()),
@@ -686,20 +787,17 @@ def create_user(db, user_data):
         
         with db.client.start_session() as session:
             with session.start_transaction():
-                # Insert the user document
                 db.users.insert_one(user_doc, session=session)
-                
-                # Log the initial Ficore Credit transaction
                 transaction = {
                     'user_id': user_id,
-                    'amount': 10.0,  # Initial 10 FCs
-                    'type': 'initial_credit',  # New transaction type for registration bonus
+                    'amount': 10.0,  # Keep as 10.0 for double, or 10 for int
+                    'type': 'initial_credit',
                     'date': datetime.utcnow(),
                     'notes': 'Initial 10 Ficore Credits granted upon registration'
                 }
                 db.ficore_credit_transactions.insert_one(transaction, session=session)
         
-        logger.info(f"{trans('general_user_created', default='Created user with ID')}: {user_id} with 10 Ficore Credits", 
+        logger.info(f"Created user with ID: {user_id} with 10 Ficore Credits", 
                    extra={'session_id': 'no-session-id'})
         get_user.cache_clear()
         get_user_by_email.cache_clear()
@@ -717,9 +815,9 @@ def create_user(db, user_data):
             dark_mode=user_doc['dark_mode']
         )
     except Exception as e:
-        logger.error(f"{trans('general_user_creation_error', default='Error creating user')}: {trans('general_duplicate_key_error', default='Duplicate key error')} - {str(e)}", 
+        logger.error(f"Error creating user: {str(e)}", 
                     exc_info=True, extra={'session_id': 'no-session-id'})
-        raise ValueError(trans('general_user_exists', default='User with this email or username already exists'))
+        raise ValueError("User with this email or username already exists")
 
 @lru_cache(maxsize=128)
 def get_user_by_email(db, email):
@@ -1859,24 +1957,10 @@ def delete_shopping_list(db, list_id, user_id=None, email=None):
         raise
 
 def deduct_ficore_credits(db, user_id, email, amount, action, ref=None):
-    """
-    Deduct Ficore credits from a user's balance and log the transaction.
-    
-    Args:
-        db: MongoDB database instance
-        user_id: ID of the user
-        email: Email of the user
-        amount: Amount of credits to deduct
-        action: Type of action (e.g., 'create_shopping_list')
-        ref: Optional reference ID (e.g., list or item ID)
-    
-    Returns:
-        bool: True if successful, False if insufficient credits or failure
-    """
     try:
         if amount <= 0:
             raise ValueError(f"Invalid deduction amount: {amount}")
-        amount = round(float(amount), 2)        
+        amount = round(float(amount), 2)
         with db.client.start_session() as session:
             with session.start_transaction():
                 user = db.users.find_one({'_id': user_id, 'email': email.lower()}, session=session)
@@ -1891,9 +1975,10 @@ def deduct_ficore_credits(db, user_id, email, amount, action, ref=None):
                                   extra={'session_id': 'no-session-id'})
                     return False
                 
+                new_balance = round(current_balance - amount, 2)  # Keep as double, or use int(current_balance - amount) for integers
                 result = db.users.update_one(
                     {'_id': user_id, 'email': email.lower()},
-                    {'$inc': {'ficore_credit_balance': -amount}},
+                    {'$set': {'ficore_credit_balance': new_balance}},  # Use $set to enforce type
                     session=session
                 )
                 if result.modified_count == 0:
