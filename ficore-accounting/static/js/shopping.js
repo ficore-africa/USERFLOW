@@ -1,21 +1,21 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Translation map for help text and UI messages
     const helpTextTranslations = {
-        'budget': "{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}",
-        'quantity': "{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}",
-        'price': "{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}",
-        'frequency': "{{ t('shopping_frequency_help', default='Enter frequency in days (e.g., 7)') | e }}",
-        'amount_max': "{{ t('shopping_amount_max', default='Input cannot exceed 10 billion') | e }}",
-        'amount_positive': "{{ t('shopping_amount_positive', default='Amount must be positive') | e }}",
-        'quantity_max': "{{ t('shopping_quantity_max', default='Quantity cannot exceed 1000') | e }}",
-        'frequency_max': "{{ t('shopping_frequency_max', default='Frequency cannot exceed 365 days') | e }}",
-        'budget_required': "{{ t('shopping_budget_required', default='Budget is required') | e }}",
-        'name_required': "{{ t('shopping_list_name_invalid', default='Please enter a valid list name') | e }}",
-        'item_added': "{{ t('shopping_item_added', default='Item added successfully!') | e }}",
-        'add_item_error': "{{ t('shopping_add_item_error', default='Failed to add item. Please try again.') | e }}",
-        'edit_item_error': "{{ t('shopping_edit_item_error', default='Failed to save item changes. Please try again.') | e }}",
-        'table_error': "{{ t('shopping_table_error', default='Failed to load items. Please try again.') | e }}",
-        'duplicate_item_name': "{{ t('shopping_duplicate_item_name', default='Item name already exists in this list.') | e }}"
+        'budget': "Enter your budget (e.g., 100,000 or 100,000.00)",
+        'quantity': "Enter the number of units (e.g., 2 cartons, 5 pieces)",
+        'price': "Enter price per unit (e.g., price for one carton or piece)",
+        'frequency': "Enter frequency in days (e.g., 7)",
+        'amount_max': "Input cannot exceed 10 billion",
+        'amount_positive': "Amount must be positive",
+        'quantity_max': "Quantity cannot exceed 1000",
+        'frequency_max': "Frequency cannot exceed 365 days",
+        'budget_required': "Budget is required",
+        'name_required': "Please enter a valid list name",
+        'item_added': "Item added successfully!",
+        'add_item_error': "Failed to add item. Please try again.",
+        'edit_item_error': "Failed to save item changes. Please try again.",
+        'table_error': "Failed to load items. Please try again.",
+        'duplicate_item_name': "Item name already exists in this list."
     };
 
     // Local state for items in dashboard
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
         toastEl.innerHTML = `
             <div class="d-flex">
                 <div class="toast-body">${message}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="{{ t('general_close', default='Close') | e }}"></button>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         `;
         toastContainer.appendChild(toastEl);
@@ -217,6 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
                             formIsValid = false;
                         } else if (numValue <= 0) {
+                            numValue = 0;
                             input.classList.add('is-invalid');
                             input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                             formIsValid = false;
@@ -249,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || 0;
+                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || '{{ selected_list.budget | default(0) }}')) || 0;
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -320,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (data.success) {
                             window.location.href = data.redirect_url || '{{ url_for("personal.shopping.main", tab="dashboard") | e }}';
                         } else {
-                            let errorMsg = data.error || "{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}";
+                            let errorMsg = data.error || "Failed to create list. Please try again.";
                             if (data.errors) {
                                 Object.keys(data.errors).forEach(field => {
                                     const input = form.querySelector(`[name="${field}"]`);
@@ -349,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             submitButton.querySelector('.spinner-border')?.classList.add('d-none');
                             submitButton.querySelector('i')?.classList.remove('d-none');
                         }
-                        showToast("{{ t('shopping_create_error', default='Failed to create list. Please try again.') | e }}", 'danger');
+                        showToast("Failed to create list. Please try again.", 'danger');
                     });
                 }
             });
@@ -431,16 +432,16 @@ document.addEventListener('DOMContentLoaded', function() {
             modal.show();
         } catch (error) {
             console.error('Error opening edit modal:', error);
-            showToast("{{ t('shopping_edit_modal_error', default='Failed to open edit modal. Please try again.') | e }}", 'danger');
+            showToast("Failed to open edit modal. Please try again.", 'danger');
         }
     };
 
-    // Save edited item
+    // Save edited item Cina
     document.getElementById('saveEditItem')?.addEventListener('click', function() {
         const form = document.getElementById('manageListForm') || document.getElementById('saveListForm');
         if (!form) {
             console.error('Form not found for saving edited item');
-            showToast("{{ t('shopping_form_error', default='Form not found. Please try again.') | e }}", 'danger');
+            showToast("Form not found. Please try again.", 'danger');
             return;
         }
 
@@ -462,7 +463,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const itemIndex = items.findIndex(item => item.id === index);
                 if (itemIndex === -1) {
                     console.error('Item not found for editing:', index);
-                    showToast("{{ t('shopping_item_not_found', default='Item not found. Please try again.') | e }}", 'danger');
+                    showToast("Item not found. Please try again.", 'danger');
                     return;
                 }
 
@@ -531,7 +532,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error deleting item:', error);
-            showToast("{{ t('shopping_delete_item_error', default='Failed to delete item. Please try again.') | e }}", 'danger');
+            showToast("Failed to delete item. Please try again.", 'danger');
         }
     };
 
@@ -539,7 +540,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateItemsTable() {
         const tbody = document.getElementById('items-table-body');
         if (!tbody) {
-            console.error('Items table body not found');
+            console.warn('Items table body not found, skipping table update');
             return;
         }
 
@@ -555,13 +556,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td>${escapeHtml(item.category)}</td>
                     <td>${escapeHtml(item.status)}</td>
                     <td>${escapeHtml(item.store || '')}</td>
-                    <td>${escapeHtml(item.frequency.toString())} {{ t('general_days', default='days') | e }}</td>
+                    <td>${escapeHtml(item.frequency.toString())} days</td>
                     <td>
                         <button type="button" class="btn btn-primary btn-sm" onclick="openEditModal('${escapeHtml(item.id)}', '${escapeHtml(item.name)}', ${item.quantity}, '${escapeHtml(formatForDisplay(item.price, false))}', '${escapeHtml(item.unit)}', '${escapeHtml(item.category)}', '${escapeHtml(item.status)}', '${escapeHtml(item.store || '')}', ${item.frequency})">
-                            <i class="fa-solid fa-pen-to-square"></i> {{ t('general_edit', default='Edit') | e }}
+                            <i class="fa-solid fa-pen-to-square"></i> Edit
                         </button>
                         <button type="button" class="btn btn-danger btn-sm" onclick="deleteItem('${escapeHtml(item.id)}')">
-                            <i class="fa-solid fa-trash"></i> {{ t('general_delete', default='Delete') | e }}
+                            <i class="fa-solid fa-trash"></i> Delete
                         </button>
                     </td>
                 `;
@@ -573,7 +574,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr>
                         <td colspan="9" class="empty-state text-center">
                             <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                            <p>{{ t('shopping_empty_list', default='Your shopping list is empty. Add items to get started!') | e }}</p>
+                            <p>Your shopping list is empty. Add items to get started!</p>
                         </td>
                     </tr>
                 `;
@@ -656,7 +657,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const remaining = budget - total;
                 remainingElement.textContent = remaining >= 0
                     ? formatForDisplay(remaining, false)
-                    : `{{ t('general_over_by', default='Over by') | e }}: ${formatForDisplay(-remaining, false)}`;
+                    : `Over by: ${formatForDisplay(-remaining, false)}`;
             }
         } catch (error) {
             console.error('Error updating budget progress:', error);
@@ -671,9 +672,9 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
-                    <p>{{ t('shopping_no_list_selected', default='No list selected. Please select a list to manage.') | e }}</p>
+                    <p>No list selected. Please select a list to manage.</p>
                     <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
-                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                        <i class="fa-solid fa-plus"></i> Create List
                     </a>
                 </div>
             `;
@@ -719,9 +720,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 detailsDiv.innerHTML = `
                     <div class="empty-state text-center">
                         <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
-                        <p>${data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}"}</p>
+                        <p>${data.error || "Failed to load list details. Please try again."}</p>
                         <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
-                            <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                            <i class="fa-solid fa-plus"></i> Create List
                         </a>
                     </div>
                 `;
@@ -729,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     items = [];
                     updateItemsTable();
                 }
-                showToast(data.error || "{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}", 'danger');
+                showToast(data.error || "Failed to load list details. Please try again.", 'danger');
             }
         })
         .catch(error => {
@@ -737,9 +738,9 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsDiv.innerHTML = `
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
-                    <p>{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}</p>
+                    <p>Failed to load list details. Please try again.</p>
                     <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
-                        <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
+                        <i class="fa-solid fa-plus"></i> Create List
                     </a>
                 </div>
             `;
@@ -747,7 +748,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 items = [];
                 updateItemsTable();
             }
-            showToast("{{ t('shopping_load_error', default='Failed to load list details. Please try again.') | e }}", 'danger');
+            showToast("Failed to load list details. Please try again.", 'danger');
         });
     };
 
@@ -784,6 +785,7 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.setItem('activeShoppingTab', activeTab);
     }
 
+    // Trace Cina
     // Re-enable buttons on page load
     document.querySelectorAll('button[type="submit"]').forEach(button => {
         button.disabled = false;
