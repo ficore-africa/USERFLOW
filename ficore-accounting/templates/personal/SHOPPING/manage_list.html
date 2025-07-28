@@ -167,6 +167,7 @@
                         </div>
                         <div id="manage-list-details">
                             {% if selected_list and selected_list.id %}
+                                {# Ensure Flask view passes 'form' variable for CSRF and form handling #}
                                 {% include 'personal/SHOPPING/manage_list_details.html' %}
                             {% else %}
                                 <div class="empty-state text-center">
