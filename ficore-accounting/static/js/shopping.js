@@ -170,6 +170,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 let formIsValid = true;
 
+                // Clean budget field before submission
+                const budgetInput = form.querySelector('#list_budget');
+                if (budgetInput) {
+                    budgetInput.value = cleanForParse(budgetInput.value); // Remove commas
+                }
+
                 // Validate required fields
                 form.querySelectorAll('[required]').forEach(input => {
                     if (!input.value.trim()) {
@@ -257,11 +263,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         formIsValid = false;
                     } else if (budget <= 0 && budgetInput && budgetInput.hasAttribute('required')) {
                         budgetInput.classList.add('is-invalid');
-                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_positive'];
                         formIsValid = false;
                     } else if (budget > 10000000000) {
                         budgetInput.classList.add('is-invalid');
-                        budgetInput.nextElementSibling.innerText = helpTextTranslations['amount_max'];
+                        input.nextElementSibling.innerText = helpTextTranslations['amount_max'];
                         formIsValid = false;
                     }
 
@@ -670,7 +676,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="empty-state text-center">
                     <i class="fas fa-cart-shopping fa-3x mb-3"></i>
                     <p>No active list selected. Please select an active list to manage.</p>
-                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                    <a href="/personal/shopping?tab=create-list" class="btn btn-primary">
                         <i class="fa-solid fa-plus"></i> Create List
                     </a>
                 </div>
@@ -688,7 +694,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
 
-        fetch('{{ url_for("personal.shopping.get_list_details") | e }}?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
+        fetch(window.SHOPPING_GET_LIST_DETAILS_URL + '?list_id=' + encodeURIComponent(listId) + '&tab=' + encodeURIComponent(tab), {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
@@ -722,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="empty-state text-center">
                         <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
                         <p>${data.error || "Failed to load list details. Please try again."}</p>
-                        <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                        <a href="/personal/shopping?tab=create-list" class="btn btn-primary">
                             <i class="fa-solid fa-plus"></i> Create List
                         </a>
                     </div>
@@ -740,7 +746,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="empty-state text-center">
                     <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
                     <p>Failed to load list details. Please try again.</p>
-                    <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
+                    <a href="/personal/shopping?tab=create-list" class="btn btn-primary">
                         <i class="fa-solid fa-plus"></i> Create List
                     </a>
                 </div>
