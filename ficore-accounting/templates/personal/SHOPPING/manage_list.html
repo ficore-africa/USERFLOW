@@ -5,40 +5,7 @@
 {% endblock %}
 
 {% block extra_head %}
-<style>
-    .toast-container {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1055;
-    }
-    .progress {
-        height: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    .progress-bar {
-        transition: width 0.3s ease-in-out;
-    }
-    .empty-state {
-        padding: 2rem;
-        color: #6c757d;
-    }
-    .dark-mode .empty-state {
-        color: #adb5bd;
-    }
-    .form-control-sm {
-        font-size: 0.875rem;
-        padding: 0.25rem 0.5rem;
-    }
-    .dark-mode .toast {
-        background-color: #343a40;
-        color: #ffffff;
-    }
-    .edit-modal .modal-body input,
-    .edit-modal .modal-body select {
-        margin-bottom: 0.5rem;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/shopping.css') | e }}">
 {% endblock %}
 
 {% block content %}
@@ -217,18 +184,20 @@
                             <p>{{ t('shopping_no_lists', default='No active lists found. Create one to get started.') | e }}</p>
                             <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
                                 <i class="fa-solid fa-plus"></i> {{ t('shopping_create_list', default='Create List') | e }}
-                                    </a>
-                                </div>
-                            {% endif %}
+                            </a>
                         </div>
-                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    window.SHOPPING_GET_LIST_DETAILS_URL = "{{ url_for('personal.shopping.get_list_details') | e }}";
+</script>
 <script defer src="{{ url_for('static', filename='js/shopping.js') | e }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
