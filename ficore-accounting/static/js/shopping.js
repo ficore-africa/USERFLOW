@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget_raw | default(0) }};
+                    const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || 0;
                     if (total > budget && budget > 0) {
                         e.preventDefault();
                         const modal = new bootstrap.Modal(document.getElementById('budgetWarningModal'));
@@ -640,7 +640,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!form) return;
         try {
             const total = form.id === 'saveListForm' ? calculateFrontendTotal() : calculateTotalCost(form);
-            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || {{ selected_list.budget_raw | default(0) }};
+            const budget = parseFloat(cleanForParse(form.querySelector('#list_budget')?.value || document.getElementById('budget-amount')?.textContent)) || 0;
             const progressBar = form.querySelector('#budget-progress') || document.getElementById('budget-progress');
             if (progressBar && budget > 0) {
                 const percentage = (total / budget * 100).toFixed(2);
