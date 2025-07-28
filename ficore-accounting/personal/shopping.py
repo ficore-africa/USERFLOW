@@ -49,8 +49,8 @@ def auto_categorize_item(item_name):
 
 def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_session=None):
     try:
-        amount = int(amount * 100) / 100  # Convert to int-friendly value (e.g., 0.1 -> 10/100)
-        if amount <= 0:
+        amount = int(amount)  # Ensure amount is an integer (1 or 2)
+        if amount not in [1, 2]:
             logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}",
                         extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
             return False
@@ -284,7 +284,7 @@ def main():
 
     # Check credits before rendering create-list tab
     if request.args.get('tab', 'create-list') == 'create-list' and current_user.is_authenticated and not is_admin():
-        if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
+        if not check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
             flash(trans('shopping_insufficient_credits', default='Insufficient credits to create a list. Please add credits.'), 'danger')
             return redirect(url_for('dashboard.index'))
 
@@ -350,7 +350,7 @@ def main():
         if action == 'create_list':
             if list_form.validate_on_submit():
                 if current_user.is_authenticated and not is_admin():
-                    if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
+                    if not check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
                         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                             return jsonify({
                                 'success': False,
@@ -375,16 +375,7 @@ def main():
                     with db.client.start_session() as mongo_session:
                         with mongo_session.start_transaction():
                             db.shopping_lists.insert_one(list_data, session=mongo_session)
-                            if current_user.is_authenticated and not is_admin():
-                                if not deduct_ficore_credits(db, current_user.id, 0.1, 'create_shopping_list', list_data['_id'], mongo_session):
-                                    db.shopping_lists.delete_one({'_id': list_data['_id']}, session=mongo_session)
-                                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                                        return jsonify({
-                                            'success': False,
-                                            'error': trans('shopping_credit_deduction_failed', default='Failed to deduct credits.')
-                                        }), 500
-                                    flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits.'), 'danger')
-                                    return redirect(url_for('personal.shopping.main', tab='create-list'))
+                            # Deduction moved to save_list action
                     session['selected_list_id'] = str(list_data['_id'])
                     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                         return jsonify({
@@ -497,10 +488,7 @@ def main():
                     with db.client.start_session() as mongo_session:
                         with mongo_session.start_transaction():
                             db.shopping_items.insert_one(new_item_data, session=mongo_session)
-                            if current_user.is_authenticated and not is_admin():
-                                if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
-                                    flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
-                                    return redirect(url_for('personal.shopping.main', tab='add-items', list_id=list_id))
+                            # Deduction moved to save_list action
                     added += 1
                     existing_names.add(item_data['name'].lower())
                 except ValueError as e:
@@ -585,10 +573,6 @@ def main():
                                 db.shopping_items.insert_one(new_item_data, session=mongo_session)
                                 added += 1
                                 existing_names.add(item_data['name'].lower())
-                                if current_user.is_authenticated and not is_admin():
-                                    if not deduct_ficore_credits(db, current_user.id, 0.1, 'add_shopping_item', new_item_data['_id'], mongo_session):
-                                        flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item.'), 'danger')
-                                        return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
                             except ValueError as e:
                                 flash(trans('shopping_item_error', default='Error adding item: ') + str(e), 'danger')
                         if added > 0:
@@ -599,6 +583,10 @@ def main():
                                 {'$set': {'total_spent': total_spent, 'updated_at': datetime.utcnow(), 'status': 'saved'}},
                                 session=mongo_session
                             )
+                            if current_user.is_authenticated and not is_admin():
+                                if not deduct_ficore_credits(db, current_user.id, 1, 'save_shopping_list', list_id, mongo_session):
+                                    flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for saving list.'), 'danger')
+                                    return redirect(url_for('personal.shopping.main', tab='dashboard', list_id=list_id))
                             get_shopping_lists.cache_clear()
                             flash(trans('shopping_list_saved', default=f'{added} item(s) saved successfully!'), 'success')
                             if total_spent > shopping_list['budget']:
@@ -642,7 +630,7 @@ def main():
                 flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
                 return redirect(url_for('personal.shopping.main', tab='view-lists'))
             if current_user.is_authenticated and not is_admin():
-                if not check_ficore_credit_balance(required_amount=0.5, user_id=current_user.id):
+                if not check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
                     flash(trans('shopping_insufficient_credits', default='Insufficient credits to delete list.'), 'danger')
                     return redirect(url_for('dashboard.index'))
             try:
@@ -651,7 +639,7 @@ def main():
                         db.shopping_items.delete_many({'list_id': list_id}, session=mongo_session)
                         db.shopping_lists.delete_one({'_id': ObjectId(list_id)}, session=mongo_session)
                         if current_user.is_authenticated and not is_admin():
-                            if not deduct_ficore_credits(db, current_user.id, 0.5, 'delete_shopping_list', list_id, mongo_session):
+                            if not deduct_ficore_credits(db, current_user.id, 1, 'delete_shopping_list', list_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for deletion.'), 'danger')
                                 return redirect(url_for('personal.shopping.main', tab='view-lists'))
                 if session.get('selected_list_id') == list_id:
@@ -924,8 +912,8 @@ def manage_list(list_id):
                             session=mongo_session
                         )
                         total_operations = added + edited + deleted
-                        required_credits = total_operations * 0.1
-                        if current_user.is_authenticated and not is_admin():
+                        required_credits = 1 if total_operations > 0 else 0
+                        if current_user.is_authenticated and not is_admin() and required_credits > 0:
                             if not check_ficore_credit_balance(required_amount=required_credits, user_id=current_user.id):
                                 flash(trans('shopping_insufficient_credits', default='Insufficient credits to save changes.'), 'danger')
                                 return redirect(url_for('dashboard.index'))
@@ -953,7 +941,7 @@ def manage_list(list_id):
                             session=mongo_session
                         )
                         if current_user.is_authenticated and not is_admin():
-                            if not deduct_ficore_credits(db, current_user.id, 0.1, 'delete_shopping_item', item_id, mongo_session):
+                            if not deduct_ficore_credits(db, current_user.id, 1, 'delete_shopping_item', item_id, mongo_session):
                                 flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for item deletion.'), 'danger')
                                 return redirect(url_for('personal.shopping.main', tab='manage-list', list_id=list_id))
                         get_shopping_lists.cache_clear()
@@ -1054,7 +1042,7 @@ def export_list_pdf(list_id):
             flash(trans('shopping_list_not_saved', default='List must be saved before exporting.'), 'danger')
             return redirect(url_for('personal.shopping.main', tab='view-lists'))
         if current_user.is_authenticated and not is_admin():
-            if not check_ficore_credit_balance(required_amount=0.1, user_id=current_user.id):
+            if not check_ficore_credit_balance(required_amount=2, user_id=current_user.id):
                 flash(trans('shopping_insufficient_credits', default='Insufficient credits to export PDF.'), 'danger')
                 return redirect(url_for('dashboard.index'))
         items = db.shopping_items.find({'list_id': str(list_id)}).sort('created_at', -1)
@@ -1167,7 +1155,7 @@ def export_list_pdf(list_id):
                 p.save()
                 buffer.seek(0)
                 if current_user.is_authenticated and not is_admin():
-                    if not deduct_ficore_credits(db, current_user.id, 0.1, 'export_shopping_list_pdf', list_id, mongo_session):
+                    if not deduct_ficore_credits(db, current_user.id, 2, 'export_shopping_list_pdf', list_id, mongo_session):
                         flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for PDF export.'), 'danger')
                         return redirect(url_for('personal.shopping.main', tab='view-lists'))
         return Response(buffer, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename=shopping_list_{list_id}.pdf'})
