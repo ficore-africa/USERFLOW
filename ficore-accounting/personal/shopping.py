@@ -318,6 +318,7 @@ def main():
             'store': item.get('store', 'Unknown'),
             'frequency': int(item.get('frequency', 7))
         } for item in list_items]
+        selected_list['items'] = items  # Explicitly set items as a list
 
     categories = {}
     if selected_list_id:
@@ -674,13 +675,7 @@ def main():
             'status': lst.get('status', 'active'),
             'created_at': lst.get('created_at').strftime('%Y-%m-%d') if lst.get('created_at') else 'N/A',
             'collaborators': lst.get('collaborators', []),
-            'items': []
-        }
-        if callable(lst.get('items')):
-            logger.error(f"Items field is a callable for list {lst['_id']}")
-            list_data['items'] = []
-        else:
-            list_data['items'] = [{
+            'items': [{
                 'id': str(item['_id']),
                 'name': item.get('name', ''),
                 'quantity': int(item.get('quantity', 1)),
@@ -692,14 +687,11 @@ def main():
                 'store': item.get('store', 'Unknown'),
                 'frequency': int(item.get('frequency', 7))
             } for item in list_items]
+        }
         lists_dict[list_data['id']] = list_data
 
-    selected_list = lists_dict.get(selected_list_id, {}) if selected_list_id else {}
-    items = selected_list.get('items', []) if isinstance(selected_list.get('items'), list) else []
-    if callable(selected_list.get('items')):
-        logger.error(f"Selected list items field is a callable for list {selected_list_id}")
-        items = []
-    
+    selected_list = lists_dict.get(selected_list_id, {'items': []})  # Ensure default empty items list
+    items = selected_list.get('items', [])  # Always a list due to above
     insights = []
     if selected_list and selected_list['budget_raw'] > 0:
         if selected_list['total_spent_raw'] > selected_list['budget_raw']:
@@ -763,13 +755,7 @@ def get_list_details():
         'status': shopping_list.get('status', 'active'),
         'created_at': shopping_list.get('created_at'),
         'collaborators': shopping_list.get('collaborators', []),
-        'items': []
-    }
-    if callable(shopping_list.get('items')):
-        logger.error(f"Items field is a callable for list {list_id}")
-        selected_list['items'] = []
-    else:
-        selected_list['items'] = [{
+        'items': [{
             'id': str(item['_id']),
             'name': item.get('name', ''),
             'quantity': int(item.get('quantity', 1)),
@@ -780,6 +766,7 @@ def get_list_details():
             'store': item.get('store', 'Unknown'),
             'frequency': int(item.get('frequency', 7))
         } for item in list_items]
+    }
     
     try:
         html = render_template(
@@ -985,12 +972,7 @@ def manage_list(list_id):
                 'status': lst.get('status', 'active'),
                 'created_at': lst.get('created_at'),
                 'collaborators': lst.get('collaborators', []),
-                'items': []
-            }
-            if callable(lst.get('items')):
-                logger.error(f"Items field is a callable for list {lst['_id']}")
-            else:
-                list_data['items'] = [{
+                'items': [{
                     'id': str(item['_id']),
                     'name': item.get('name', ''),
                     'quantity': int(item.get('quantity', 1)),
@@ -1002,15 +984,10 @@ def manage_list(list_id):
                     'store': item.get('store', 'Unknown'),
                     'frequency': int(item.get('frequency', 7))
                 } for item in list_items]
+            }
             lists_dict[list_data['id']] = list_data
-        selected_list = lists_dict.get(list_id)
-        if not selected_list:
-            flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
-            return redirect(url_for('personal.shopping.main', tab='manage-list'))
-        items = selected_list['items'] if isinstance(selected_list['items'], list) else []
-        if callable(selected_list.get('items')):
-            logger.error(f"Selected list items field is a callable for list {list_id}")
-            items = []
+        selected_list = lists_dict.get(list_id, {'items': []})  # Ensure default empty items list
+        items = selected_list['items']  # Always a list due to above
         categories = {
             trans('shopping_category_fruits', default='Fruits'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'fruits'),
             trans('shopping_category_vegetables', default='Vegetables'): sum(item['price_raw'] * item['quantity'] for item in items if item['category'] == 'vegetables'),
@@ -1087,13 +1064,7 @@ def export_list_pdf(list_id):
                 'collaborators': shopping_list.get('collaborators', []),
                 'created_at': shopping_list.get('created_at')
             }],
-            'items': []
-        }
-        if callable(shopping_list.get('items')):
-            logger.error(f"Items field is a callable for list {list_id}")
-            shopping_data['items'] = []
-        else:
-            shopping_data['items'] = [{
+            'items': [{
                 'name': item.get('name', ''),
                 'quantity': int(item.get('quantity', 1)),
                 'price': float(item.get('price', 0)),
@@ -1103,6 +1074,7 @@ def export_list_pdf(list_id):
                 'store': item.get('store', 'Unknown'),
                 'created_at': item.get('created_at')
             } for item in items]
+        }
         with db.client.start_session() as mongo_session:
             with mongo_session.start_transaction():
                 buffer = BytesIO()
