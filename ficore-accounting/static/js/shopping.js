@@ -44,10 +44,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (value === null || value === undefined || isNaN(value)) {
             return isInteger ? '0' : '0.00';
         }
-        if (isInteger) {
-            return Math.floor(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
-        }
-        return parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return isInteger
+            ? parseInt(value).toLocaleString('en-US', { maximumFractionDigits: 0 })
+            : parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     // Helper function to clean input for numeric parsing
@@ -57,12 +56,9 @@ document.addEventListener('DOMContentLoaded', function() {
         let clean = value.toString().replace(/[^0-9.]/g, '');
         const parts = clean.split('.');
         if (parts.length > 2) {
-            // Keep only the first decimal point
-            clean = parts[0] + '.' + parts.slice(1).join('');
-        }
-        // Ensure only two decimal places
-        if (parts.length > 1 && parts[1].length > 2) {
-            clean = parts[0] + '.' + parts[1].slice(0, 2);
+            clean = parts[0] + '.' + parts[1].slice(0, 2); // Keep only first decimal point and up to 2 decimal places
+        } else if (parts.length === 2) {
+            clean = parts[0] + (parts[1] ? '.' + parts[1].slice(0, 2) : '');
         }
         return clean;
     }
@@ -72,19 +68,21 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.number-input').forEach(input => {
             const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
             const allowCommas = input.dataset.allowCommas === 'true';
-            const originalHelpText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+            const originalHelpText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
 
             // Initialize value on load
-            if (input.value && allowCommas) {
+            if (input.value) {
                 let rawValue = cleanForParse(input.value);
-                let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
-                if (!isNaN(numValue) && numValue > 0) {
+                let numValue = isInteger ? parseInt(rawValue) : parseFloat(rawValue);
+                if (!isNaN(numValue) && numValue >= 0) {
                     input.value = isInteger ? numValue.toString() : formatForDisplay(numValue, false);
+                } else {
+                    input.value = '';
                 }
             }
 
             input.addEventListener('focus', function() {
-                if (allowCommas) {
+                if (allowCommas && input.value) {
                     input.value = cleanForParse(input.value);
                 }
             });
@@ -142,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!isInteger && allowCommas) {
                     const parts = cleanedValue.split('.');
                     if (parts.length > 2) {
-                        cleanedValue = parts[0] + '.' + parts.slice(1).join('');
+                        cleanedValue = parts[0] + '.' + parts[1];
                     }
                 }
                 if (input.value !== cleanedValue) {
@@ -151,6 +149,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.value = cleanedValue;
                     input.setSelectionRange(start, end);
                 }
+                input.classList.remove('is-invalid');
                 updateBudgetProgress(input.closest('form'));
             });
 
@@ -166,19 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if ((input.id.includes('frequency') || input.classList.contains('new-item-frequency')) && numValue > 365) numValue = 365;
                     input.value = numValue.toString();
                 } else {
-                    if (allowCommas) {
-                        const parts = clean.split('.');
-                        if (parts.length > 2) {
-                            clean = parts[0] + '.' + parts.slice(1).join('');
-                        }
-                        if (parts.length > 1) {
-                            parts[1] = parts[1].slice(0, 2);
-                            clean = parts[0] + (parts[1] ? '.' + parts[1] : '');
-                        }
-                        input.value = formatForDisplay(parseFloat(clean) || 0, false);
-                    } else {
-                        input.value = clean;
-                    }
+                    input.value = allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : numValue.toFixed(2);
                 }
                 input.dispatchEvent(new Event('blur'));
                 updateBudgetProgress(input.closest('form'));
@@ -203,10 +190,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 let formIsValid = true;
 
+                // Debug: Log form submission attempt
+                console.log('Form submission attempted:', form.id, 'Values:', {
+                    name: form.querySelector('#list_name')?.value,
+                    budget: form.querySelector('#list_budget')?.value
+                });
+
                 // Clean budget field before submission
                 const budgetInput = form.querySelector('#list_budget');
                 if (budgetInput) {
-                    budgetInput.value = cleanForParse(budgetInput.value);
+                    const rawBudget = budgetInput.value;
+                    const cleanedBudget = cleanForParse(rawBudget);
+                    budgetInput.value = cleanedBudget;
+                    console.log('Budget cleaned:', { raw: rawBudget, cleaned: cleanedBudget });
                 }
 
                 // Validate required fields
@@ -220,6 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 : helpTextTranslations['budget_required'];
                         }
                         formIsValid = false;
+                        console.log('Validation failed for required field:', input.id);
                     } else {
                         input.classList.remove('is-invalid');
                         const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling.nextElementSibling : input.nextElementSibling;
@@ -254,84 +251,35 @@ document.addEventListener('DOMContentLoaded', function() {
                             input.classList.remove('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['frequency'];
                         }
+                        input.value = numValue.toString();
                     } else {
                         if (!rawValue && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
                             formIsValid = false;
+                            console.log('Budget validation failed: empty or invalid', { rawValue, numValue });
                         } else if (isNaN(numValue) && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
                             formIsValid = false;
+                            console.log('Budget validation failed: NaN', { rawValue, numValue });
                         } else if (numValue > 10000000000) {
                             input.classList.add('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations['amount_max'];
                             formIsValid = false;
+                            console.log('Budget validation failed: exceeds max', { rawValue, numValue });
                         } else if (numValue <= 0 && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations['amount_positive'];
                             formIsValid = false;
+                            console.log('Budget validation failed: non-positive', { rawValue, numValue });
                         } else {
                             input.classList.remove('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['price'];
                         }
+                        input.value = allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : (isNaN(numValue) ? '' : numValue.toFixed(2));
                     }
-                    input.value = isInteger ? numValue.toString() : (allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : (isNaN(numValue) ? '' : numValue.toFixed(2)));
                 });
-
-                if (form.id === 'updateListForm' || form.id === 'addItemsForm' || form.id === 'saveListForm') {
-                    const itemNames = [];
-                    if (form.id === 'addItemsForm') {
-                        form.querySelectorAll('input[name$="[name]"]').forEach(input => {
-                            if (input.value.trim()) {
-                                itemNames.push(input.value.trim().toLowerCase());
-                            }
-                        });
-                    }
-                    const uniqueNames = new Set(itemNames);
-                    const duplicateWarning = document.getElementById('duplicateWarning');
-                    if (itemNames.length !== uniqueNames.size && duplicateWarning) {
-                        duplicateWarning.classList.remove('d-none');
-                        showToast(helpTextTranslations['duplicate_item_name'], 'danger');
-                        formIsValid = false;
-                    } else if (duplicateWarning) {
-                        duplicateWarning.classList.add('d-none');
-                    }
-
-                    const total = calculateTotalCost(form);
-                    const budgetInput = form.querySelector('#list_budget');
-                    const budget = budgetInput ? parseFloat(cleanForParse(budgetInput.value)) || 0 : 0;
-                    if (!budget && budgetInput && budgetInput.hasAttribute('required')) {
-                        budgetInput.classList.add('is-invalid');
-                        const helpElement = budgetInput.nextElementSibling?.classList.contains('invalid-feedback') ? budgetInput.nextElementSibling.nextElementSibling : budgetInput.nextElementSibling;
-                        if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
-                        formIsValid = false;
-                    } else if (budget <= 0 && budgetInput && budgetInput.hasAttribute('required')) {
-                        budgetInput.classList.add('is-invalid');
-                        const helpElement = budgetInput.nextElementSibling?.classList.contains('invalid-feedback') ? budgetInput.nextElementSibling.nextElementSibling : budgetInput.nextElementSibling;
-                        if (helpElement) helpElement.innerText = helpTextTranslations['amount_positive'];
-                        formIsValid = false;
-                    } else if (budget > 10000000000) {
-                        budgetInput.classList.add('is-invalid');
-                        const helpElement = budgetInput.nextElementSibling?.classList.contains('invalid-feedback') ? budgetInput.nextElementSibling.nextElementSibling : budgetInput.nextElementSibling;
-                        if (helpElement) helpElement.innerText = helpTextTranslations['amount_max'];
-                        formIsValid = false;
-                    }
-
-                    if (total > budget && budget > 0) {
-                        e.preventDefault();
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('budgetWarningModal')) || new bootstrap.Modal(document.getElementById('budgetWarningModal'));
-                        modal.show();
-                        const proceedButton = document.getElementById('proceedSubmit');
-                        if (proceedButton) {
-                            proceedButton.onclick = function() {
-                                form.dataset.allowSubmit = 'true';
-                                form.submit();
-                            };
-                        }
-                        formIsValid = false;
-                    }
-                }
 
                 if (!formIsValid && !form.dataset.allowSubmit) {
                     e.preventDefault();
@@ -340,6 +288,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         firstInvalid.focus();
                     }
+                    console.log('Form submission blocked due to validation errors');
                     return;
                 }
 
@@ -350,6 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (spinner) spinner.classList.remove('d-none');
                     const icon = submitButton.querySelector('i');
                     if (icon) icon.classList.add('d-none');
+                    console.log('Form submission proceeding:', form.id);
                 }
             });
         });
