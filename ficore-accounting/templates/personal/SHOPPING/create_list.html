@@ -66,9 +66,9 @@
                         </div>
                         <div class="mb-3">
                             <label for="{{ list_form.budget.id }}" class="form-label">{{ t('general_budget', default='Budget') | e }}</label>
-                            {{ list_form.budget(class="form-control number-input", type="text", data_allow_commas="true", placeholder=t('shopping_budget_placeholder', default='e.g., 100000.00') | e, value='' if list_form.budget.data is none else list_form.budget.data, required=True) }}
+                            {{ list_form.budget(class="form-control number-input", type="text", data_allow_commas="true", placeholder=t('shopping_budget_placeholder', default='e.g., 100,000.00') | e, value=(list_form.budget.data | string | replace(',', '') if list_form.budget.data is not none else ''), required=True) }}
                             <div class="invalid-feedback">{{ t('shopping_budget_required', default='Budget is required') | e }}</div>
-                            <small id="budget_help" class="form-text text-muted">{{ t('shopping_budget_help', default='Enter your budget (e.g., 100000 or 100000.00)') | e }}</small>
+                            <small id="budget_help" class="form-text text-muted">{{ t('shopping_budget_help', default='Enter your budget (e.g., 100,000 or 100,000.00)') | e }}</small>
                         </div>
                         <button type="submit" class="btn btn-primary" id="createListSubmit">
                             <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
@@ -92,16 +92,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.toast').forEach(toast => {
         new bootstrap.Toast(toast).show();
-    });
-
-    // Clean comma-separated inputs on blur
-    document.querySelectorAll('input[data-allow-commas="true"]').forEach(input => {
-        input.addEventListener('blur', function() {
-            let value = this.value.replace(/,/g, '');
-            if (!isNaN(parseFloat(value)) && isFinite(value)) {
-                this.value = parseFloat(value).toFixed(2);
-            }
-        });
     });
 });
 </script>
