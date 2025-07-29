@@ -53,10 +53,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper function to clean input for numeric parsing
     function cleanForParse(value) {
         if (!value && value !== 0) return '';
-        const clean = value.toString().replace(/[^0-9.]/g, '');
+        // Remove all non-numeric characters except one decimal point
+        let clean = value.toString().replace(/[^0-9.]/g, '');
         const parts = clean.split('.');
         if (parts.length > 2) {
-            return parts[0] + '.' + parts.slice(1).join('');
+            // Keep only the first decimal point
+            clean = parts[0] + '.' + parts.slice(1).join('');
+        }
+        // Ensure only two decimal places
+        if (parts.length > 1 && parts[1].length > 2) {
+            clean = parts[0] + '.' + parts[1].slice(0, 2);
         }
         return clean;
     }
@@ -67,6 +73,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const isInteger = input.id.includes('quantity') || input.id.includes('frequency') || input.classList.contains('new-item-quantity') || input.classList.contains('new-item-frequency');
             const allowCommas = input.dataset.allowCommas === 'true';
             const originalHelpText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['quantity'] || helpTextTranslations['price'] || helpTextTranslations['frequency'];
+
+            // Initialize value on load
+            if (input.value && allowCommas) {
+                let rawValue = cleanForParse(input.value);
+                let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+                if (!isNaN(numValue) && numValue > 0) {
+                    input.value = isInteger ? numValue.toString() : formatForDisplay(numValue, false);
+                }
+            }
 
             input.addEventListener('focus', function() {
                 if (allowCommas) {
@@ -101,6 +116,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!rawValue && input.hasAttribute('required')) {
                         input.classList.add('is-invalid');
                         if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
+                    } else if (isNaN(numValue) && input.hasAttribute('required')) {
+                        input.classList.add('is-invalid');
+                        if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
                     } else if (numValue > 10000000000) {
                         numValue = 10000000000;
                         input.classList.add('is-invalid');
@@ -113,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         input.classList.remove('is-invalid');
                         if (helpElement) helpElement.innerText = originalHelpText;
                     }
-                    input.value = allowCommas ? formatForDisplay(numValue, false) : numValue.toFixed(2);
+                    input.value = allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : (isNaN(numValue) ? '' : numValue.toFixed(2));
                 }
                 updateBudgetProgress(input.closest('form'));
             });
@@ -166,7 +184,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateBudgetProgress(input.closest('form'));
             });
 
-            input.dispatchEvent(new Event('blur'));
+            // Trigger blur on load to format initial value
+            if (input.value) {
+                input.dispatchEvent(new Event('blur'));
+            }
         });
     }
 
@@ -203,7 +224,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         input.classList.remove('is-invalid');
                         const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling.nextElementSibling : input.nextElementSibling;
                         if (helpElement) {
-                            helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['name'];
+                            helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['name'];
                         }
                     }
                 });
@@ -231,10 +252,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             formIsValid = false;
                         } else {
                             input.classList.remove('is-invalid');
-                            if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['frequency'];
+                            if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['frequency'];
                         }
                     } else {
                         if (!rawValue && input.hasAttribute('required')) {
+                            input.classList.add('is-invalid');
+                            if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
+                            formIsValid = false;
+                        } else if (isNaN(numValue) && input.hasAttribute('required')) {
                             input.classList.add('is-invalid');
                             if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
                             formIsValid = false;
@@ -248,10 +273,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             formIsValid = false;
                         } else {
                             input.classList.remove('is-invalid');
-                            if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['price'];
+                            if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('edit-item-', '').replace('item-', '')] || helpTextTranslations['budget'] || helpTextTranslations['price'];
                         }
                     }
-                    input.value = isInteger ? numValue.toString() : (allowCommas ? formatForDisplay(numValue, false) : numValue.toFixed(2));
+                    input.value = isInteger ? numValue.toString() : (allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : (isNaN(numValue) ? '' : numValue.toFixed(2)));
                 });
 
                 if (form.id === 'updateListForm' || form.id === 'addItemsForm' || form.id === 'saveListForm') {
@@ -554,6 +579,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.classList.add('is-invalid');
                     if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
                     formIsValid = false;
+                } else if (isNaN(numValue) && input.hasAttribute('required')) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
+                    formIsValid = false;
                 } else if (numValue > 10000000000) {
                     input.classList.add('is-invalid');
                     if (helpElement) helpElement.innerText = helpTextTranslations['amount_max'];
@@ -567,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('item-', '')] || helpTextTranslations['price'];
                 }
             }
-            input.value = isInteger ? numValue.toString() : (allowCommas ? formatForDisplay(numValue, false) : numValue.toFixed(2));
+            input.value = isInteger ? numValue.toString() : (allowCommas && !isNaN(numValue) ? formatForDisplay(numValue, false) : (isNaN(numValue) ? '' : numValue.toFixed(2)));
         });
 
         if (!formIsValid) {
