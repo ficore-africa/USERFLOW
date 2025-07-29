@@ -72,7 +72,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="edit-item-price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
-                        <input type="text" id="edit-item-price" class="form-control number-input" required>
+                        <input type="text" id="edit-item-price" class="form-control number-input" data-allow-commas="true" required>
                         <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
                     </div>
                     <div class="mb-3">
@@ -171,7 +171,7 @@
                                     {{ list_form.csrf_token }}
                                     <input type="hidden" name="action" value="save_list">
                                     <input type="hidden" name="list_id" value="{{ selected_list.id | e }}">
-                                    <input type="hidden" name="budget" id="list_budget" class="number-input" value="{{ selected_list.budget_raw | float | default(0.0) }}">
+                                    <input type="hidden" name="budget" id="list_budget" class="number-input" data-allow-commas="true" value="{{ selected_list.budget_raw | e }}">
                                     <p><strong>{{ t('general_budget', default='Budget') | e }}:</strong> <span id="budget-amount">{{ selected_list.budget | e }}</span></p>
                                     <p><strong>{{ t('general_total_spent', default='Total Spent') | e }}:</strong> <span id="total-spent">{{ selected_list.total_spent | e }}</span></p>
                                     <p><strong>{{ t('general_remaining', default='Remaining') | e }}:</strong> <span id="remaining-budget">{{ format_currency(selected_list.budget_raw - selected_list.total_spent_raw) | e }}</span></p>
@@ -200,7 +200,7 @@
                                                 <div class="row">
                                                     <div class="col-md-6 mb-3">
                                                         <label for="item_price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
-                                                        <input type="text" id="item_price" class="form-control number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
+                                                        <input type="text" id="item_price" class="form-control number-input" data-allow-commas="true" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
                                                         <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
                                                     </div>
                                                     <div class="col-md-6 mb-3">
@@ -335,6 +335,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (select && select.value) {
         loadListDetails(select.value, 'dashboard');
     }
+
+    // Clean comma-separated inputs on blur
+    document.querySelectorAll('input[data-allow-commas="true"]').forEach(input => {
+        input.addEventListener('blur', function() {
+            let value = this.value.replace(/,/g, '');
+            if (!isNaN(parseFloat(value)) && isFinite(value)) {
+                this.value = parseFloat(value).toFixed(2);
+            }
+        });
+    });
 });
 </script>
 {% endblock %}
