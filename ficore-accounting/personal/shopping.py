@@ -155,7 +155,7 @@ class ShoppingListForm(FlaskForm):
         filters=[clean_currency],
         validators=[
             DataRequired(message=trans('shopping_budget_required', default='Budget is required')),
-            NumberRange(min=0, max=10000000000, message=trans('shopping_budget_max', default='Budget must be between 0 and 10 billion'))
+            NumberRange(min=0.01, max=10000000000, message=trans('shopping_budget_max', default='Budget must be between 0.01 and 10 billion'))
         ]
     )
     submit = SubmitField(trans('shopping_submit', default='Create List'))
@@ -168,8 +168,19 @@ class ShoppingListForm(FlaskForm):
         self.submit.label.text = trans('shopping_submit', lang) or 'Create List'
 
     def validate_budget(self, budget):
-        if budget.data is not None:
-            budget.data = round(float(budget.data), 2)
+        if budget.data is None or budget.data == '':
+            raise ValidationError(trans('shopping_budget_required', default='Budget is required'))
+        try:
+            # Clean the input to remove any non-numeric characters except decimal point
+            cleaned_value = str(budget.data).replace(',', '').replace(' ', '')
+            budget.data = round(float(cleaned_value), 2)
+            if budget.data < 0.01:
+                raise ValidationError(trans('shopping_budget_min', default='Budget must be at least 0.01'))
+            if budget.data > 10000000000:
+                raise ValidationError(trans('shopping_budget_max', default='Budget must be between 0.01 and 10 billion'))
+        except (ValueError, TypeError):
+            logger.error(f"Budget validation failed: {budget.data}", extra={'session_id': session.get('sid', 'no-session-id')})
+            raise ValidationError(trans('shopping_budget_invalid', default='Invalid budget format'))
 
 class ShoppingItemsForm(FlaskForm):
     name = StringField(
@@ -349,6 +360,7 @@ def main():
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'create_list':
+            logger.debug(f"Processing create_list action with form data: {request.form}", extra={'session_id': session.get('sid', 'no-session-id')})
             if list_form.validate_on_submit():
                 if current_user.is_authenticated and not is_admin():
                     if not check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
@@ -364,7 +376,7 @@ def main():
                     'name': list_form.name.data,
                     'user_id': str(current_user.id) if current_user.is_authenticated else None,
                     'session_id': session['sid'] if not current_user.is_authenticated else None,
-                    'budget': float(clean_currency(list_form.budget.data)),
+                    'budget': float(list_form.budget.data),  # Use validated budget data
                     'created_at': datetime.utcnow(),
                     'updated_at': datetime.utcnow(),
                     'collaborators': [],
@@ -396,6 +408,7 @@ def main():
                     return redirect(url_for('personal.shopping.main', tab='create-list'))
             else:
                 errors = {field: [trans(error, default=error) for error in field_errors] for field, field_errors in list_form.errors.items()}
+                logger.debug(f"Form validation failed: {errors}", extra={'session_id': session.get('sid', 'no-session-id')})
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({
                         'success': False,
