@@ -72,7 +72,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="edit-item-price" class="form-label">{{ t('general_price', default='Price') | e }}</label>
-                        <input type="text" id="edit-item-price" class="form-control number-input" required>
+                        <input type="text" id="edit-item-price" class="form-control number-input" data-allow-commas="true" required>
                         <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
                     </div>
                     <div class="mb-3">
@@ -167,7 +167,6 @@
                         </div>
                         <div id="manage-list-details">
                             {% if selected_list and selected_list.id %}
-                                {# Ensure Flask view passes 'form' variable for CSRF and form handling #}
                                 {% include 'personal/SHOPPING/manage_list_details.html' %}
                             {% else %}
                                 <div class="empty-state text-center">
@@ -180,7 +179,7 @@
                             {% endif %}
                         </div>
                     {% else %}
-                        <div class="empty-state text-center">
+                        <div id="manage-list-details" class="empty-state text-center">
                             <i class="fa-solid fa-cart-shopping fa-3x mb-3"></i>
                             <p>{{ t('shopping_no_lists', default='No active lists found. Create one to get started.') | e }}</p>
                             <a href="{{ url_for('personal.shopping.main', tab='create-list') | e }}" class="btn btn-primary">
@@ -218,7 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <small class="form-text text-muted">{{ t('shopping_quantity_help', default='Enter the number of units (e.g., 2 cartons, 5 pieces)') | e }}</small>
             </div>
             <div class="col-md-2 mb-3">
-                <input type="text" name="new_items[${itemIndex}][price]" class="form-control new-item-price number-input" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
+                <input type="text" name="new_items[${itemIndex}][price]" class="form-control new-item-price number-input" data-allow-commas="true" placeholder="{{ t('shopping_price_placeholder', default='e.g., 500.00') | e }}" value="0.00" required>
                 <small class="form-text text-muted">{{ t('shopping_price_help', default='Enter price per unit (e.g., price for one carton or piece)') | e }}</small>
             </div>
             <div class="col-md-2 mb-3">
@@ -259,6 +258,16 @@ document.addEventListener('DOMContentLoaded', function() {
             table.appendChild(tbody);
         }
     }
+
+    // Clean comma-separated inputs on blur
+    document.querySelectorAll('input[data-allow-commas="true"]').forEach(input => {
+        input.addEventListener('blur', function() {
+            let value = this.value.replace(/,/g, '');
+            if (!isNaN(parseFloat(value)) && isFinite(value)) {
+                this.value = parseFloat(value).toFixed(2);
+            }
+        });
+    });
 });
 </script>
 {% endblock %}
