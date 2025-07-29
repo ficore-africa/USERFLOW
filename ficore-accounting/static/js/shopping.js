@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!input.value.trim()) {
                         input.classList.add('is-invalid');
                         const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling : input.nextElementSibling?.nextElementSibling;
-                        if (help Element) {
+                        if (helpElement) {
                             helpElement.innerText = input.id.includes('name')
                                 ? helpTextTranslations['name_required']
                                 : helpTextTranslations['budget_required'];
@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Save edited item
     document.getElementById('saveEditItem')?.addEventListener('click', function() {
-        const form = document.getElementById('addItemsForm');
+        const form = document.getElementById('addItemsForm') || document.getElementById('addItemForm');
         if (!form) {
             console.error('Form not found for saving edited item');
             showToast("Form not found. Please try again.", 'danger');
@@ -495,6 +495,184 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['delete_item_error'], 'danger');
         }
     };
+
+    // Add item
+    document.getElementById('addItemSubmit')?.addEventListener('click', function() {
+        const form = document.getElementById('addItemForm');
+        if (!form) {
+            console.error('Add item form not found');
+            showToast("Form not found. Please try again.", 'danger');
+            return;
+        }
+
+        let formIsValid = true;
+        form.querySelectorAll('[required]').forEach(input => {
+            if (!input.value.trim()) {
+                input.classList.add('is-invalid');
+                const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling : input.nextElementSibling?.nextElementSibling;
+                if (helpElement) {
+                    helpElement.innerText = input.id.includes('name')
+                        ? helpTextTranslations['name_required']
+                        : helpTextTranslations['budget_required'];
+                }
+                formIsValid = false;
+            } else {
+                input.classList.remove('is-invalid');
+                const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling.nextElementSibling : input.nextElementSibling;
+                if (helpElement) {
+                    helpElement.innerText = helpTextTranslations[input.id.replace('item-', '')] || helpTextTranslations['name'];
+                }
+            }
+        });
+
+        form.querySelectorAll('.number-input').forEach(input => {
+            const isInteger = input.id.includes('quantity') || input.id.includes('frequency');
+            const allowCommas = input.dataset.allowCommas === 'true';
+            let rawValue = cleanForParse(input.value);
+            let numValue = isInteger ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+            const helpElement = input.nextElementSibling?.classList.contains('invalid-feedback') ? input.nextElementSibling.nextElementSibling : input.nextElementSibling;
+
+            if (isInteger) {
+                if (input.id.includes('quantity') && numValue > 1000) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['quantity_max'];
+                    formIsValid = false;
+                } else if (input.id.includes('frequency') && numValue > 365) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['frequency_max'];
+                    formIsValid = false;
+                } else if (numValue <= 0 && input.hasAttribute('required')) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['amount_positive'];
+                    formIsValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('item-', '')] || helpTextTranslations['quantity'] || helpTextTranslations['frequency'];
+                }
+            } else {
+                if (!rawValue && input.hasAttribute('required')) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['budget_required'];
+                    formIsValid = false;
+                } else if (numValue > 10000000000) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['amount_max'];
+                    formIsValid = false;
+                } else if (numValue <= 0 && input.hasAttribute('required')) {
+                    input.classList.add('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations['amount_positive'];
+                    formIsValid = false;
+                } else {
+                    input.classList.remove('is-invalid');
+                    if (helpElement) helpElement.innerText = helpTextTranslations[input.id.replace('item-', '')] || helpTextTranslations['price'];
+                }
+            }
+            input.value = isInteger ? numValue.toString() : (allowCommas ? formatForDisplay(numValue, false) : numValue.toFixed(2));
+        });
+
+        if (!formIsValid) {
+            const firstInvalid = form.querySelector('.is-invalid');
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+            return;
+        }
+
+        const csrfToken = form.querySelector('input[name="csrf_token"]')?.value || window.CSRF_TOKEN || '';
+        if (!csrfToken) {
+            console.error('CSRF token not found');
+            showToast(helpTextTranslations['csrf_error'], 'danger');
+            return;
+        }
+
+        const formData = new FormData(form);
+        formData.set('item_price', cleanForParse(form.querySelector('#item_price').value));
+        formData.set('item_quantity', parseInt(form.querySelector('#item_quantity').value) || 1);
+        formData.set('item_frequency', parseInt(form.querySelector('#item_frequency').value) || 1);
+
+        const submitButton = this;
+        submitButton.disabled = true;
+        const spinner = submitButton.querySelector('.spinner-border') || document.createElement('span');
+        spinner.className = 'spinner-border spinner-border-sm';
+        spinner.setAttribute('role', 'status');
+        spinner.setAttribute('aria-hidden', 'true');
+        if (!submitButton.contains(spinner)) submitButton.prepend(spinner);
+        const icon = submitButton.querySelector('i');
+        if (icon) icon.classList.add('d-none');
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            submitButton.disabled = false;
+            spinner.remove();
+            if (icon) icon.classList.remove('d-none');
+
+            if (data.success) {
+                showToast(helpTextTranslations['item_added'], 'success');
+                updateItemsTable(data.item);
+                form.reset();
+                updateBudgetProgress(form);
+                const itemAddedToast = document.getElementById('itemAddedToast');
+                if (itemAddedToast) {
+                    itemAddedToast.classList.remove('d-none');
+                    new bootstrap.Toast(itemAddedToast).show();
+                }
+            } else {
+                showToast(data.error || helpTextTranslations['add_item_error'], 'danger');
+            }
+        })
+        .catch(error => {
+            submitButton.disabled = false;
+            spinner.remove();
+            if (icon) icon.classList.remove('d-none');
+            console.error('Error adding item:', error);
+            showToast(error.message.includes('CSRF') ? helpTextTranslations['csrf_error'] : helpTextTranslations['add_item_error'], 'danger');
+        });
+    });
+
+    // Update items table dynamically
+    function updateItemsTable(item) {
+        const tbody = document.getElementById('items-table-body');
+        if (!tbody) {
+            console.warn('Items table body not found');
+            return;
+        }
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${item.name}</td>
+            <td>${item.quantity}</td>
+            <td>${formatForDisplay(item.price, false)}</td>
+            <td>${item.unit}</td>
+            <td>${item.category}</td>
+            <td>${item.status}</td>
+            <td>${item.store || ''}</td>
+            <td>${item.frequency || ''}</td>
+            <td>
+                <button class="btn btn-sm btn-primary" onclick="openEditModal('${item.id}', '${item.name}', ${item.quantity}, ${item.price}, '${item.unit}', '${item.category}', '${item.status}', '${item.store || ''}', ${item.frequency || 1})">
+                    <i class="fa-solid fa-edit"></i>
+                </button>
+                <form class="delete-item-form d-inline" method="POST" action="${document.getElementById('addItemForm').action}">
+                    <input type="hidden" name="csrf_token" value="${window.CSRF_TOKEN}">
+                    <input type="hidden" name="action" value="delete_item">
+                    <input type="hidden" name="item_id" value="${item.id}">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="deleteItem('${item.id}'); return false;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </form>
+            </td>
+        `;
+        tbody.prepend(row);
+        initializeNumberInputs();
+    }
 
     // Calculate total cost for manage list form
     function calculateTotalCost(form) {
@@ -660,6 +838,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const dashboardSelect = document.getElementById('dashboard-list-select');
     if (dashboardSelect?.value) {
         loadListDetails(dashboardSelect.value, 'dashboard');
+    }
+
+    // Ensure items-table-body exists
+    if (!document.getElementById('items-table-body')) {
+        console.warn('items-table-body element not found. Initializing empty tbody.');
+        const table = document.getElementById('items-table');
+        if (table) {
+            const tbody = document.createElement('tbody');
+            tbody.id = 'items-table-body';
+            table.appendChild(tbody);
+        }
     }
 
     // Tab persistence with sessionStorage
