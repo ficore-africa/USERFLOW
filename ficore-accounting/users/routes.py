@@ -11,10 +11,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mailman import EmailMessage
 import re
 import random
-from pymongo import errors
 from itsdangerous import URLSafeTimedSerializer
 import utils
 from translations import trans
+from db import create_user
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,7 @@ def login():
                     return render_template('users/login.html', form=form, title=trans('general_login', lang=session.get('lang', 'en'))), 401
 
                 username = user['_id']
-                if not check_password_hash(user['password'], form.password.data):
+                if not check_password_hash(user['password_hash'], form.password.data):
                     logger.warning(f"Login attempt failed for username: {username} (invalid password)")
                     flash(trans('general_invalid_password', default='Incorrect password'), 'danger')
                     return render_template('users/login.html', form=form, title=trans('general_login', lang=session.get('lang', 'en'))), 401
@@ -535,9 +535,9 @@ def signup():
             user_data = {
                 '_id': username,
                 'email': email,
-                'password': generate_password_hash(form.password.data),
+                'password': form.password.data,  # create_user will hash this
                 'role': role,
-                'coin_balance': 10,
+                'ficore_credit_balance': 10.0,
                 'language': language,
                 'dark_mode': False,
                 'is_admin': False,
@@ -548,23 +548,20 @@ def signup():
             if role == 'agent':
                 user_data['agent_details'] = {'agent_id': agent_id}
 
-            result = db.users.insert_one(user_data)
-            if not result.inserted_id:
-                flash(trans('general_database_error', default='An error occurred while creating your account. Please try again later.'), 'danger')
-                logger.error(f"Failed to insert user: {username}")
-                return render_template('users/signup.html', form=form, title=trans('general_signup', lang=session.get('lang', 'en'))), 500
+            user_obj = create_user(db, user_data)
 
-            db.coin_transactions.insert_one({
+            db.ficore_credit_transactions.insert_one({
                 'user_id': username,
-                'amount': 10,
+                'email': email,
+                'amount': 10.0,
                 'type': 'credit',
-                'ref': f"SIGNUP_BONUS_{datetime.utcnow().isoformat()}",
-                'date': datetime.utcnow()
+                'description': 'Signup bonus',
+                'timestamp': datetime.utcnow()
             })
             db.audit_logs.insert_one({
                 'admin_id': 'system',
                 'action': 'signup',
-                'details': {'user_id': username, 'role': role, 'agent_id': agent_id if role == 'agent' else None},
+                'details': {'user_id': username, 'email': email, 'role': role, 'agent_id': agent_id if role == 'agent' else None},
                 'timestamp': datetime.utcnow()
             })
 
@@ -677,7 +674,7 @@ def reset_password():
                 return render_template('users/reset_password.html', form=form, token=token, title=trans('general_reset_password', lang=session.get('lang', 'en')))
             db.users.update_one(
                 {'_id': user['_id']},
-                {'$set': {'password': generate_password_hash(form.password.data)},
+                {'$set': {'password_hash': generate_password_hash(form.password.data)},
                  '$unset': {'reset_token': '', 'reset_token_expiry': ''}}
             )
             log_audit_action('reset_password', {'user_id': user['_id']})
