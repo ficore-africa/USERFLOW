@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from pymongo import ASCENDING, DESCENDING
 import os
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, DuplicateKeyError, OperationFailure
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, DuplicateKeyError, OperationFailure, WriteError
 from werkzeug.security import generate_password_hash
 from bson import ObjectId
 import logging
@@ -768,8 +768,11 @@ def create_user(db, user_data):
     try:
         user_id = user_data.get('username', user_data['email'].split('@')[0]).lower()
         if 'password' not in user_data:
-            user_data['password'] = str(uuid.uuid4())  # Generate a random temporary password
+            user_data['password = str(uuid.uuid4())  # Generate a random temporary password
         user_data['password_hash'] = generate_password_hash(user_data['password'])
+        
+        # Ensure ficore_credit_balance is an integer
+        ficore_credit_balance = int(user_data.get('ficore_credit_balance', 10))
         
         user_doc = {
             '_id': user_id,
@@ -779,8 +782,8 @@ def create_user(db, user_data):
             'display_name': user_data.get('display_name', user_id),
             'is_admin': user_data.get('is_admin', False),
             'setup_complete': user_data.get('setup_complete', False),
-            'coin_balance': user_data.get('coin_balance', 10),
-            'ficore_credit_balance': user_data.get('ficore_credit_balance', 10.0),  # Keep as 10.0 for double, or 10 for int
+            'coin_balance': int(user_data.get('coin_balance', 10)),  # Ensure coin_balance is also int
+            'ficore_credit_balance': ficore_credit_balance,
             'language': user_data.get('lang', 'en'),
             'dark_mode': user_data.get('dark_mode', False),
             'created_at': user_data.get('created_at', datetime.utcnow()),
@@ -794,14 +797,14 @@ def create_user(db, user_data):
                 db.users.insert_one(user_doc, session=session)
                 transaction = {
                     'user_id': user_id,
-                    'amount': 10.0,  # Keep as 10.0 for double, or 10 for int
+                    'amount': ficore_credit_balance,  # Use integer for consistency
                     'type': 'initial_credit',
                     'date': datetime.utcnow(),
-                    'notes': 'Initial 10 Ficore Credits granted upon registration'
+                    'notes': f'Initial {ficore_credit_balance} Ficore Credits granted upon registration'
                 }
                 db.ficore_credit_transactions.insert_one(transaction, session=session)
         
-        logger.info(f"Created user with ID: {user_id} with 10 Ficore Credits", 
+        logger.info(f"Created user with ID: {user_id} with {ficore_credit_balance} Ficore Credits", 
                    extra={'session_id': 'no-session-id'})
         get_user.cache_clear()
         get_user_by_email.cache_clear()
@@ -818,10 +821,22 @@ def create_user(db, user_data):
             language=user_doc['language'],
             dark_mode=user_doc['dark_mode']
         )
-    except Exception as e:
-        logger.error(f"Error creating user: {str(e)}", 
+    except WriteError as e:
+        if e.code == 121:  # Document validation error
+            logger.error(f"Document validation failed: {e.details['errmsg']}", 
+                        exc_info=True, extra={'session_id': 'no-session-id'})
+            raise ValueError(f"Document validation failed: {e.details['errmsg']}")
+        elif e.code == 11000:  # Duplicate key error
+            logger.error(f"Duplicate key error for user {user_id}: {str(e)}", 
+                        exc_info=True, extra={'session_id': 'no-session-id'})
+            raise ValueError("User with this email or username already exists")
+        logger.error(f"Unexpected MongoDB error creating user {user_id}: {str(e)}", 
                     exc_info=True, extra={'session_id': 'no-session-id'})
-        raise ValueError("User with this email or username already exists")
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user {user_id}: {str(e)}", 
+                    exc_info=True, extra={'session_id': 'no-session-id'})
+        raise
 
 @lru_cache(maxsize=128)
 def get_user_by_email(db, email):
