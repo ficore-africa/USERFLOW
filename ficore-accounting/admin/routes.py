@@ -1011,13 +1011,13 @@ def manage_user_roles():
             flash(trans('user_id_required', default='User ID is required'), 'danger')
             return redirect(url_for('admin.manage_user_roles'))
         try:
-            user = db.users.find_one({'_id': ObjectId(user_id)})
+            user = db.users.find_one({'_id': user_id})
             if not user:
                 flash(trans('user_not_found', default='User not found'), 'danger')
                 return redirect(url_for('admin.manage_user_roles'))
             new_role = form.role.data
             db.users.update_one(
-                {'_id': ObjectId(user_id)},
+                {'_id': user_id},
                 {'$set': {'role': new_role, 'updated_at': datetime.datetime.utcnow()}}
             )
             logger.info(f"User role updated: id={user_id}, new_role={new_role}, user={current_user.id}",
