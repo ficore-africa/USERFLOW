@@ -768,7 +768,7 @@ def create_user(db, user_data):
     try:
         user_id = user_data.get('username', user_data['email'].split('@')[0]).lower()
         if 'password' not in user_data:
-            user_data['password = str(uuid.uuid4())  # Generate a random temporary password
+            user_data['password' = str(uuid.uuid4())  # Generate a random temporary password
         user_data['password_hash'] = generate_password_hash(user_data['password'])
         
         # Ensure ficore_credit_balance is an integer
