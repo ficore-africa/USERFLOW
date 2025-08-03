@@ -456,7 +456,7 @@ def create_app():
                     '_id': admin_username.lower(),
                     'username': admin_username.lower(),
                     'email': admin_email.lower(),
-                    'password_hash': generate_password_hash(admin_password),
+                    'password': admin_password,  # Pass plain password
                     'is_admin': True,
                     'role': 'admin',
                     'created_at': datetime.utcnow(),
@@ -464,11 +464,16 @@ def create_app():
                     'setup_complete': True,
                     'display_name': admin_username
                 }
-                db.users.insert_one(user_data)
                 create_user(db, user_data)
                 logger.info(f'Admin user created with email: {admin_email}')
             else:
-                logger.info(f'Admin user already exists with email: {admin_email}')
+                # Update password if admin exists to ensure correct hash
+                db.users.update_one(
+                    {'_id': admin_username.lower()},
+                    {'$set': {'password_hash': generate_password_hash(admin_password)}}
+                )
+                logger.info(f'Admin user password updated for email: {admin_email}')
+
     except Exception as e:
         logger.error(f'Error in create_app initialization: {str(e)}', exc_info=True)
         raise
