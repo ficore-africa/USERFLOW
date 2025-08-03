@@ -14,7 +14,7 @@ import random
 from itsdangerous import URLSafeTimedSerializer
 import utils
 from translations import trans
-from db import create_user
+from models import create_user
 
 logger = logging.getLogger(__name__)
 
