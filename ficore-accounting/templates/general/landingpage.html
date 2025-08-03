@@ -3,28 +3,28 @@
 
 {% block content %}
 <div class="container">
-<!-- Welcome Section - Streamlined -->
-<div class="section-card welcome-section-card text-center">
-    <h1 class="section-title">{{ t('general_welcome', default='Welcome to FiCore Africa') | e }}</h1>
-    <p class="text-muted">{{ t('general_ficore_desc', default='Africa\'s leading platform for personal finance, business management, and agent services, tailored for you.') | e }}</p>
-    
-    <!-- Initial Get Started Button -->
-    <div id="initial-cta" class="mb-3">
-        <button id="get-started-btn" class="btn btn-primary btn-lg" type="button" data-bs-toggle="collapse" data-bs-target="#auth-options" aria-expanded="false" aria-controls="auth-options" data-bs-title="{{ t('general_get_started_tooltip', default='Start your financial journey') | e }}">
-            {{ t('general_get_started', default='Get Started') | e }}
-            <i class="bi bi-chevron-down ms-2"></i>
-        </button>
-     </div>
+    <!-- Welcome Section - Streamlined -->
+    <div class="section-card welcome-section-card text-center">
+        <h1 class="section-title">{{ t('general_welcome', default='Welcome to FiCore Africa') | e }}</h1>
+        <p class="text-muted">{{ t('general_ficore_desc', default='Africa\'s leading platform for personal finance, business management, and agent services, tailored for you.') | e }}</p>
+        
+        <!-- Initial Get Started Button -->
+        <div id="initial-cta" class="mb-3">
+            <button id="get-started-btn" class="btn btn-primary btn-lg" type="button" data-bs-toggle="collapse" data-bs-target="#auth-options" aria-expanded="false" aria-controls="auth-options" data-bs-title="{{ t('general_get_started_tooltip', default='Start your financial journey') | e }}">
+                {{ t('general_get_started', default='Get Started') | e }}
+                <i class="bi bi-chevron-down ms-2"></i>
+            </button>
+        </div>
 
-    <!-- Hidden Auth Options (revealed on Get Started click) -->
-    <div id="auth-options" class="btn-group btn-group-vertical d-md-flex mb-3 collapse">
-        <a href="{{ url_for('users.signup') }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" data-bs-title="{{ t('general_signup_tooltip', default='Create your FiCore account') | e }}">
-            <i class="bi bi-person-plus me-2"></i>{{ t('general_signup', default='Sign Up') | e }}
-        </a>
-        <a href="{{ url_for('users.login') }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" data-bs-title="{{ t('general_login_tooltip', default='Log in to your account') | e }}">
-            <i class="bi bi-box-arrow-in-right me-2"></i>{{ t('general_login', default='Log In') | e }}
-        </a>
-    </div>
+        <!-- Hidden Auth Options (revealed on Get Started click) -->
+        <div id="auth-options" class="btn-group btn-group-vertical d-md-flex mb-3 collapse">
+            <a href="{{ url_for('users.signup') }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" data-bs-title="{{ t('general_signup_tooltip', default='Create your FiCore account') | e }}">
+                <i class="bi bi-person-plus me-2"></i>{{ t('general_signup', default='Sign Up') | e }}
+            </a>
+            <a href="{{ url_for('users.login') }}" class="btn btn-outline-primary" data-bs-toggle="tooltip" data-bs-title="{{ t('general_login_tooltip', default='Log in to your account') | e }}">
+                <i class="bi bi-box-arrow-in-right me-2"></i>{{ t('general_login', default='Log In') | e }}
+            </a>
+        </div>
     </div>
 
     <!-- Notifications Placeholder (Unauthenticated) -->
@@ -54,31 +54,34 @@
         <p class="text-muted">{{ t('general_who_we_serve_desc', default='FiCore empowers individuals, businesses, and agents with tailored financial tools.') | e }}</p>
         <div class="row">
             <div class="col-md-4">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5>{{ t('general_personal', default='Personal Users') | e }}</h5>
-                        <p>{{ t('general_personal_desc', default='Plan budgets and track bills with ease.') | e }}</p>
-                        <a href="{{ url_for('users.signup') }}" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-title="{{ t('general_get_started_tooltip', default='Start your financial journey') | e }}">{{ t('general_get_started', default='Get Started') | e }}</a>
+                <a href="{{ url_for('users.signup') }}" class="tool-card-link">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5>{{ t('general_personal', default='Personal Users') | e }}</h5>
+                            <p>{{ t('general_personal_desc', default='Plan budgets and track bills with ease.') | e }}</p>
+                        </div>
                     </div>
-                </div>
+                </a>
             </div>
             <div class="col-md-4">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5>{{ t('general_trader', default='Business Owners') | e }}</h5>
-                        <p>{{ t('general_trader_desc', default='Streamline debtors, creditors, and financial reports.') | e }}</p>
-                        <a href="{{ url_for('users.signup') }}" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-title="{{ t('general_get_started_tooltip', default='Start your financial journey') | e }}">{{ t('general_get_started', default='Get Started') | e }}</a>
+                <a href="{{ url_for('users.signup') }}" class="tool-card-link">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5>{{ t('general_trader', default='Business Owners') | e }}</h5>
+                            <p>{{ t('general_trader_desc', default='Streamline debtors, creditors, and financial reports.') | e }}</p>
+                        </div>
                     </div>
-                </div>
+                </a>
             </div>
             <div class="col-md-4">
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h5>{{ t('general_agent', default='Agents') | e }}</h5>
-                        <p>{{ t('general_agent_desc', default='Onboard traders and manage tokens effortlessly.') | e }}</p>
-                        <a href="{{ url_for('users.signup') }}" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-title="{{ t('general_get_started_tooltip', default='Start your financial journey') | e }}">{{ t('general_get_started', default='Get Started') | e }}</a>
+                <a href="{{ url_for('users.signup') }}" class="tool-card-link">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5>{{ t('general_agent', default='Agents') | e }}</h5>
+                            <p>{{ t('general_agent_desc', default='Onboard traders and manage tokens effortlessly.') | e }}</p>
+                        </div>
                     </div>
-                </div>
+                </a>
             </div>
         </div>
     </div>
@@ -96,13 +99,14 @@
                     <div class="row">
                         {% for tool in category_tools %}
                             <div class="col-md-4 mb-3">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h5>{{ t(tool.get('label_key', ''), default=tool.get('label', 'Tool')) | e }}</h5>
-                                        <p>{{ t(tool.get('description_key', ''), default=tool.get('description', 'Description not available')) | e }}</p>
-                                        <a href="{{ tool.get('url', url_for('users.login')) }}" class="btn btn-primary btn-sm" data-bs-toggle="tooltip" data-bs-title="{{ t('general_login_tooltip', default='Log in to access this tool') | e }}">{{ t('general_login', default='Log In') | e }}</a>
+                                <a href="{{ tool.get('url', url_for('users.login')) }}" class="tool-card-link">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <h5>{{ t(tool.get('label_key', ''), default=tool.get('label', 'Tool')) | e }}</h5>
+                                            <p>{{ t(tool.get('description_key', ''), default=tool.get('description', 'Description not available')) | e }}</p>
+                                        </div>
                                     </div>
-                                </div>
+                                </a>
                             </div>
                         {% endfor %}
                     </div>
@@ -350,13 +354,20 @@
     font-weight: 600;
     margin-bottom: 1rem;
 }
+.tool-card-link {
+    text-decoration: none;
+    color: inherit;
+}
 .card {
     border: 1px solid #e9ecef;
     border-radius: 0.5rem;
-    transition: transform 0.2s;
+    transition: transform 0.2s, background 0.3s, box-shadow 0.3s;
 }
 .card:hover {
     transform: translateY(-5px);
+    background: #bee3f8;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    cursor: pointer;
 }
 .notification-card {
     border-bottom: 1px solid #e9ecef;
