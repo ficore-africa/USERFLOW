@@ -530,7 +530,8 @@ def get_explore_features():
                     "label_key": "bill_bill_planner",
                     "description_key": "bill_bill_desc",
                     "tooltip_key": "bill_tooltip",
-                    "icon": "bi-receipt"
+                    "icon": "bi-receipt",
+                    "category": "Personal"
                 },
                 {
                     "endpoint": "personal.shopping.main",
@@ -540,15 +541,6 @@ def get_explore_features():
                     "tooltip_key": "shopping_tooltip",
                     "icon": "bi-cart",
                     "category": "Personal"
-                },
-                {
-                    "endpoint": "creditors.index",
-                    "label": "I Owe",
-                    "label_key": "creditors_dashboard",
-                    "description_key": "creditors_dashboard_desc",
-                    "tooltip_key": "creditors_tooltip",
-                    "icon": "bi-arrow-up-circle",
-                    "category": "Business"
                 },
                 {
                     "endpoint": "debtors.index",
@@ -565,7 +557,8 @@ def get_explore_features():
                     "label_key": "receipts_dashboard",
                     "description_key": "receipts_dashboard",
                     "tooltip_key": "receipts_tooltip",
-                    "icon": "bi-cash-coin"
+                    "icon": "bi-cash-coin",
+                    "category": "Business"
                 }, 
                 {
                     "endpoint": "payments.index",
@@ -573,7 +566,8 @@ def get_explore_features():
                     "label_key": "payments_dashboard",
                     "description_key": "payments_dashboard",
                     "tooltip_key": "payments_tooltip",
-                    "icon": "bi-calculator"
+                    "icon": "bi-calculator",
+                    "category": "Business"
                 },
                 {
                     "endpoint": "agents_bp.agent_portal",
