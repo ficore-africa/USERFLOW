@@ -80,7 +80,7 @@
                     </div>
                     {% endif %}
 
-                    {% if personal_finance_summary['total_shopping_lists'] > 0 %}
+                    {% if personal_finance_summary.total_shopping_lists | default(0) > 0 %}
                     <div class="col-md-3">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body text-center">
@@ -89,9 +89,9 @@
                                 </div>
                                 <h6 class="card-title">{{ t('shopping_title', default='Shopping Lists') }}</h6>
                                 <p class="card-text">
-                                    <span class="h5 text-primary">{{ personal_finance_summary.total_shopping_lists }}</span><br>
+                                    <span class="h5 text-primary">{{ personal_finance_summary.total_shopping_lists | default(0) }}</span><br>
                                     <small class="text-muted">
-                                        {% if personal_finance_summary.total_shopping_spent > personal_finance_summary.total_shopping_budget %}
+                                        {% if (personal_finance_summary.total_shopping_spent | default(0)) > (personal_finance_summary.total_shopping_budget | default(0)) %}
                                             <span class="text-danger">{{ t('shopping_over_budget', default='Over budget') }}</span>
                                         {% else %}
                                             {{ t('shopping_within_budget', default='Within budget') }}
@@ -104,7 +104,7 @@
                     </div>
                     {% endif %}
 
-                    {% if personal_finance_summary.total_food_orders > 0 %}
+                    {% if personal_finance_summary.total_food_orders | default(0) > 0 %}
                     <div class="col-md-3">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body text-center">
@@ -113,7 +113,7 @@
                                 </div>
                                 <h6 class="card-title">{{ t('food_order_title', default='Food Orders') }}</h6>
                                 <p class="card-text">
-                                    <span class="h5 text-primary">{{ personal_finance_summary.total_food_orders }}</span><br>
+                                    <span class="h5 text-primary">{{ personal_finance_summary.total_food_orders | default(0) }}</span><br>
                                     <small class="text-muted">{{ t('food_order_active_orders', default='Active orders') }}</small>
                                 </p>
                                 <a href="{{ url_for('personal.food_order.main') }}" class="btn btn-outline-success btn-sm">{{ t('general_view', default='View') }}</a>
