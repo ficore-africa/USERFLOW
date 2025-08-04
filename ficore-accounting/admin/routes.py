@@ -1034,4 +1034,4 @@ def manage_user_roles():
     for user in users:
         user['_id'] = str(user['_id'])
         user['ficore_credit_balance'] = int(user.get('ficore_credit_balance', 0))  # Ensure integer
-    return render_template('admin/user_roles.html', form=form, users=users, title=trans('admin_manage_user_roles_title', default='Manage User Roles')). 
+    return render_template('admin/user_roles.html', form=form, users=users, title=trans('admin_manage_user_roles_title', default='Manage User Roles'))
