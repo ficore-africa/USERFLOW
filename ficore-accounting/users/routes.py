@@ -288,7 +288,7 @@ def get_post_login_redirect(user_role):
         elif user_role == 'agent':
             return url_for('agents_bp.agent_portal')
         elif user_role == 'admin':
-            return url_for('admin.dashboard')
+            return url_for('dashboard.index')
         else:
             logger.warning(f"Unknown role '{user_role}' for login redirect, defaulting to personal.index")
             return url_for('personal.index')
@@ -300,13 +300,13 @@ def get_explore_tools_redirect(user_role):
     """Determine where to redirect user when they click 'Explore Your Tools' based on their role."""
     try:
         if user_role == 'personal':
-            return url_for('personal.index')
+            return url_for('dashboard.index')
         elif user_role == 'trader':
             return url_for('general_bp.home')
         elif user_role == 'agent':
             return url_for('agents_bp.agent_portal')
         elif user_role == 'admin':
-            return url_for('admin.dashboard')
+            return url_for('dashboard.index')
         else:
             logger.warning(f"Unknown role '{user_role}' for explore tools redirect, defaulting to personal.index")
             return url_for('personal.index')
