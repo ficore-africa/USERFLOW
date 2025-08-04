@@ -448,21 +448,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Animated counter for users served
     const counter = document.querySelector('.animated-counter');
     if (counter) {
-        const target = parseInt(counter.getAttribute('data-count')) || 0;
-        if (target > 0) {
-            let current = 0;
-            const increment = Math.ceil(target / 100);
-            const updateCounter = () => {
-                current += increment;
-                if (current >= target) {
-                    current = target;
-                    counter.textContent = current.toLocaleString();
-                    clearInterval(counterInterval);
-                } else {
-                    counter.textContent = current.toLocaleString();
-                }
-            };
-            const counterInterval = setInterval(updateCounter, 50);
+        const target = counter.getAttribute('data-count') || '0';
+        if (target !== '0') {
+            counter.textContent = target; // Directly set to 150+ since it's a string
         } else {
             counter.textContent = '0'; // Explicitly set to 0 if no users
         }
