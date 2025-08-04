@@ -109,15 +109,20 @@ def log_audit_action(action, details=None):
         logger.error(f"Error logging audit action: {str(e)}",
                      extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': current_user.id})
 
-# Routes@admin_bp.route('/dashboard', methods=['GET'])
+# Routes
+@admin_bp.route('/dashboard', methods=['GET'])
 @login_required
 @utils.requires_role('admin')
 @utils.limiter.limit("50 per hour")
 def dashboard():
+    """Admin dashboard with system statistics."""
     try:
+        # Run ficore_credit_balance fix to ensure integer balances
         fix_ficore_credit_balances()
+        
         db = utils.get_mongo_db()
         
+        # Calculate system statistics
         stats = {
             'users': db.users.count_documents({}),
             'records': db.data_records.count_documents({}),
@@ -127,20 +132,22 @@ def dashboard():
             'budgets': db.budgets.count_documents({}),
             'bills': db.bills.count_documents({}),
             'payment_locations': db.payment_locations.count_documents({}),
-            'tax_deadlines': db.tax_deadlines.count_documents({}),
-            'total_shopping_lists': db.shopping_lists.count_documents({})
+            'tax_deadlines': db.tax_deadlines.count_documents({})
         }
         
+        # Get tool usage statistics
         tool_usage = {
             'audit_logs': db.audit_logs.count_documents({'action': {'$in': ['tool_used', 'tool_accessed']}})
         }
         
+        # Get recent users
         recent_users = list(db.users.find().sort('created_at', -1).limit(5))
         for user in recent_users:
             user['_id'] = str(user['_id'])
-            user['ficore_credit_balance'] = int(user.get('ficore_credit_balance', 0))
+            user['ficore_credit_balance'] = int(user.get('ficore_credit_balance', 0))  # Ensure integer
             
-        logger.info(f"Admin {current_user.id} accessed dashboard at {datetime.datetime.utcnow()}")
+        logger.info(f"Admin {current_user.id} accessed dashboard at {datetime.datetime.utcnow()}",
+                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': current_user.id})
         return render_template(
             'admin/dashboard.html',
             stats=stats,
@@ -149,7 +156,8 @@ def dashboard():
             title=trans('admin_dashboard', default='Admin Dashboard')
         )
     except Exception as e:
-        logger.error(f"Error loading admin dashboard for {current_user.id}: {str(e)}")
+        logger.error(f"Error loading admin dashboard for {current_user.id}: {str(e)}",
+                     extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': current_user.id})
         flash(trans('admin_dashboard_error', default='An error occurred while loading the dashboard'), 'danger')
         return redirect(url_for('personal_bp.error'))
 
@@ -1026,4 +1034,4 @@ def manage_user_roles():
     for user in users:
         user['_id'] = str(user['_id'])
         user['ficore_credit_balance'] = int(user.get('ficore_credit_balance', 0))  # Ensure integer
-    return render_template('admin/user_roles.html', form=form, users=users, title=trans('admin_manage_user_roles_title', default='Manage User Roles'))
+    return render_template('admin/user_roles.html', form=form, users=users, title=trans('admin_manage_user_roles_title', default='Manage User Roles')). 
