@@ -41,23 +41,45 @@ def index():
                 # Get latest records from each personal finance tool
                 latest_budget = db.budgets.find_one(query, sort=[('created_at', -1)])
                 latest_bill = db.bills.find_one(query, sort=[('created_at', -1)])
+                latest_shopping_list = db.shopping_lists.find_one(query, sort=[('created_at', -1)])
 
                 # Count total records
                 total_budgets = db.budgets.count_documents(query)
                 total_bills = db.bills.count_documents(query)
                 overdue_bills = db.bills.count_documents({**query, 'status': 'overdue'})
-                
+                total_shopping_lists = db.shopping_lists.count_documents(query)
+
+                # Calculate total shopping spent and budget
+                shopping_lists = db.shopping_lists.find(query)
+                total_shopping_spent = sum(
+                    float(item.get('total_amount', 0)) for item in shopping_lists
+                    if item.get('total_amount') is not None
+                )
+                total_shopping_budget = sum(
+                    float(item.get('budget', 0)) for item in db.shopping_lists.find(query)
+                    if item.get('budget') is not None
+                )
+
                 personal_finance_summary = {
                     'latest_budget': latest_budget,
                     'latest_bill': latest_bill,
                     'total_budgets': total_budgets,
                     'total_bills': total_bills,
                     'overdue_bills': overdue_bills,
-                    'has_personal_data': any([latest_budget, latest_bill])
+                    'latest_shopping_list': latest_shopping_list,
+                    'total_shopping_lists': total_shopping_lists,
+                    'total_shopping_spent': total_shopping_spent,
+                    'total_shopping_budget': total_shopping_budget,
+                    'has_personal_data': any([latest_budget, latest_bill, latest_shopping_list, total_shopping_lists > 0])
                 }
             except Exception as e:
                 logger.error(f"Error fetching personal finance data for user {current_user.id}: {str(e)}")
-                personal_finance_summary = {'has_personal_data': False}
+                personal_finance_summary = {
+                    'has_personal_data': False,
+                    'total_shopping_lists': 0,
+                    'total_shopping_spent': 0.0,
+                    'total_shopping_budget': 0.0
+                }
 
         # Convert ObjectIds to strings for template rendering
         for item in recent_creditors + recent_debtors + recent_payments + recent_receipts:
