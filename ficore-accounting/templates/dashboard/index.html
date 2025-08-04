@@ -179,7 +179,7 @@
         </div>
         {% endif %}
 
-        <!-- Trader/Business Section for Traders and Admins -->
+        <!-- Trader/Business Section for Traders and s -->
         {% if current_user.role in ['trader', 'admin'] %}
         <div class="mb-4">
             <h3>{{ t('general_quick_actions', default='Quick Actions') }}</h3>
@@ -190,7 +190,7 @@
                 <a href="{{ url_for('receipts.add') }}" class="btn btn-primary">{{ t('receipts_add_money_in', default='Add Money In') }}</a>
                 <a href="{{ url_for('credits.request_credits') }}" class="btn btn-success" data-bs-toggle="tooltip" title="{{ t('credits_tooltip', default='Request additional Ficore Credits to use premium features') }}">{{ t('credits_dashboard', default='Ficore Credits') }}</a>
                 {% if current_user.role == 'admin' %}
-                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-warning">{{ t('admin_dashboard', default='Admin Dashboard') }}</a>
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-warning">{{ t('admin_dashboard', default='Admin Dashboard') }}</a>
                 {% endif %}
             </div>
         </div>
