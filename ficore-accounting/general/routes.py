@@ -7,6 +7,7 @@ from models import create_feedback
 from flask_wtf.csrf import CSRFError
 from flask import current_app
 import utils
+from users.routes import get_post_login_redirect  # Import the redirect function
 
 general_bp = Blueprint('general_bp', __name__, url_prefix='/general')
 
@@ -14,7 +15,12 @@ general_bp = Blueprint('general_bp', __name__, url_prefix='/general')
 def landing():
     """Render the public landing page."""
     try:
-        current_app.logger.info(f"Accessing general.landing - User: {current_user.id if current_user.is_authenticated else 'Anonymous'}, Authenticated: {current_user.is_authenticated}, Session: {dict(session)}")
+        # Redirect authenticated users to their role-specific dashboard
+        if current_user.is_authenticated:
+            current_app.logger.info(f"Authenticated user {current_user.id} redirected from landing to {get_post_login_redirect(current_user.role)}")
+            return redirect(get_post_login_redirect(current_user.role))
+
+        current_app.logger.info(f"Accessing general.landing - User: Anonymous, Session: {dict(session)}")
         explore_features = utils.get_explore_features()
         response = make_response(render_template(
             'general/landingpage.html',
