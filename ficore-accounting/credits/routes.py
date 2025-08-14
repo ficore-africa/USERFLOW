@@ -121,6 +121,7 @@ def credit_ficore_credits(user_id: str, amount: int, ref: str, type: str = 'add'
                     'type': type,
                     'ref': ref,
                     'payment_method': 'approved_request' if type == 'add' else None,
+                    'facilitated_by_agent': admin_id or 'system',
                     'date': datetime.utcnow()
                 }, session=mongo_session)
                 db.audit_logs.insert_one({
@@ -146,7 +147,7 @@ def credit_ficore_credits(user_id: str, amount: int, ref: str, type: str = 'add'
 
 @credits_bp.route('/request', methods=['GET', 'POST'])
 @login_required
-@utils.requires_role(['personal'])
+@utils.requires_role(['trader', 'personal'])
 @limiter.limit("50 per hour")
 def request_credits():
     """Handle Ficore Credit request submissions."""
@@ -446,7 +447,7 @@ def manage_credit_request(request_id):
 
 @credits_bp.route('/receipt_upload', methods=['GET', 'POST'])
 @login_required
-@utils.requires_role(['personal'])
+@utils.requires_role(['trader', 'personal'])
 @limiter.limit("10 per hour")
 def receipt_upload():
     """Handle payment receipt uploads with transaction for Ficore Credit deduction."""
@@ -504,6 +505,7 @@ def receipt_upload():
                                 'type': 'spend',
                                 'ref': ref,
                                 'payment_method': None,
+                                'facilitated_by_agent': 'system',
                                 'date': datetime.utcnow()
                             }, session=mongo_session)
                         db.audit_logs.insert_one({
