@@ -110,7 +110,6 @@ class User(UserMixin):
         # Otherwise, extract from email
         return self.email.split('@')[0] if '@' in self.email else self.id
 
-
 # App setup
 def create_app():
     # Initialize extensions
@@ -229,11 +228,9 @@ def create_app():
             )
 
     # Template filters and context processors
-
-    # Add 't' as an alias for 'trans' for backwards compatibility in templates
     app.jinja_env.globals.update(
         trans=utils.trans_function,
-        t=utils.trans_function,  # Ensure 't' is available in Jinja templates
+        t=utils.trans_function,
         format_currency=utils.format_currency,
         format_date=utils.format_date,
         is_admin=utils.is_admin,
@@ -296,7 +293,7 @@ def create_app():
         
         return {
             'trans': utils.trans_function,
-            't': utils.trans_function,  # Ensure 't' is available everywhere
+            't': utils.trans_function,
             'current_lang': lang,
             'available_languages': [
                 {'code': code, 'name': utils.trans_function(f'lang_{code}', lang=lang, default=code.capitalize())}
@@ -371,6 +368,12 @@ def create_app():
     return app
 
 app = create_app()
+
+# Redirect from onrender.com to custom domain
+@app.before_request
+def redirect_to_custom_domain():
+    if request.host.endswith("onrender.com"):
+        return redirect(request.url.replace("onrender.com", "personal.ficoreafrica.com"), code=301)
 
 if __name__ == '__main__':
     logger.info('Starting Flask application')
