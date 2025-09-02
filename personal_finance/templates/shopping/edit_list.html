@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+{% block title %}
+{{ t('shopping_edit_list', default='Edit Shopping List') }}
+{% endblock %}
+
+{% block content %}
+<!-- CSRF Token for AJAX -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="container mt-4">
+    {% set tool_name = 'shopping_edit_list' %}
+    {% set tool_icon = 'fa-edit' %}
+    {% set subtitle = t('shopping_edit_description', default='Edit your shopping list and manage items') %}
+    {% include 'tool_header.html' %}
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="alert-container mb-4">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Navigation Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('shopping.index') }}">{{ t('shopping_title', default='Shopping List Manager') }}</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('shopping.manage') }}">{{ t('shopping_manage_lists', default='Manage Lists') }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ t('shopping_edit_list', default='Edit List') }}</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <!-- List Details -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5><i class="fas fa-list me-2"></i>{{ t('shopping_list_details', default='List Details') }}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('shopping.edit_list', list_id=list_id) }}" class="validate-form">
+                        {{ list_form.csrf_token }}
+                        <input type="hidden" name="action" value="update_list">
+                        
+                        <div class="mb-3">
+                            {{ list_form.name.label(class="form-label") }}
+                            {{ list_form.name(class="form-control", placeholder=t('shopping_list_name', default='List Name'), required=True) }}
+                            {% for error in list_form.name.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ list_form.budget.label(class="form-label") }}
+                            {{ list_form.budget(class="form-control", placeholder=t('shopping_budget', default='Budget'), step="0.01", min="0", required=True) }}
+                            {% for error in list_form.budget.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save me-2"></i>{{ t('shopping_update_list', default='Update List') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- List Statistics -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h6><i class="fas fa-chart-bar me-2"></i>{{ t('shopping_statistics', default='Statistics') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h5 class="text-primary">{{ items|length }}</h5>
+                            <small class="text-muted">{{ t('shopping_total_items', default='Total Items') }}</small>
+                        </div>
+                        <div class="col-6">
+                            <h5 class="text-success">{{ items|selectattr('status', 'equalto', 'bought')|list|length }}</h5>
+                            <small class="text-muted">{{ t('shopping_bought_items', default='Bought') }}</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row text-center">
+                        <div class="col-12">
+                            <h5 class="text-warning">{{ "%.2f"|format(total_cost) }}</h5>
+                            <small class="text-muted">{{ t('shopping_total_cost', default='Total Cost') }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Items Management -->
+        <div class="col-lg-8">
+            <!-- Add New Item -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5><i class="fas fa-plus me-2"></i>{{ t('shopping_add_item', default='Add New Item') }}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('shopping.edit_list', list_id=list_id) }}" class="validate-form">
+                        {{ item_form.csrf_token }}
+                        <input type="hidden" name="action" value="add_item">
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ item_form.name.label(class="form-label") }}
+                                {{ item_form.name(class="form-control", placeholder=t('shopping_item_name_placeholder', default='e.g., Milk'), required=True) }}
+                                {% for error in item_form.name.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.quantity.label(class="form-label") }}
+                                {{ item_form.quantity(class="form-control", min="1", max="1000", value="1", required=True) }}
+                                {% for error in item_form.quantity.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.price.label(class="form-label") }}
+                                {{ item_form.price(class="form-control", type="number", step="0.01", min="0", placeholder="0.00", required=True) }}
+                                {% for error in item_form.price.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.unit.label(class="form-label") }}
+                                {{ item_form.unit(class="form-select", required=True) }}
+                                {% for error in item_form.unit.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.category.label(class="form-label") }}
+                                {{ item_form.category(class="form-select") }}
+                                {% for error in item_form.category.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.store.label(class="form-label") }}
+                                {{ item_form.store(class="form-control", placeholder=t('shopping_store_placeholder', default='e.g., Walmart'), required=True) }}
+                                {% for error in item_form.store.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                {{ item_form.frequency.label(class="form-label") }}
+                                {{ item_form.frequency(class="form-control", min="1", max="365", value="7", required=True) }}
+                                {% for error in item_form.frequency.errors %}
+                                    <small class="text-danger">{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-plus me-2"></i>{{ t('shopping_add_item', default='Add Item') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Items List -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-shopping-cart me-2"></i>{{ t('shopping_items_list', default='Items List') }}</h5>
+                    <span class="badge bg-light text-dark">{{ items|length }} {{ t('shopping_items', default='items') }}</span>
+                </div>
+                <div class="card-body">
+                    {% if items %}
+{$                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>{{ t('shopping_item_name', default='Item') }}</th>
+                                        <th>{{ t('shopping_quantity', default='Qty') }}</th>
+                                        <th>{{ t('shopping_price', default='Price') }}</th>
+                                        <th>{{ t('shopping_unit', default='Unit') }}</th>
+                                        <th>{{ t('shopping_category', default='Category') }}</th>
+                                        <th>{{ t('shopping_store', default='Store') }}</th>
+                                        <th>{{ t('shopping_status', default='Status') }}</th>
+                                        <th>{{ t('shopping_actions', default='Actions') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in items %}
+                                        <tr id="item-{{ item.id }}" class="{{ 'table-success' if item.status == 'bought' else '' }}">
+                                            <td>
+                                                <strong>{{ item.name }}</strong>
+                                            </td>
+                                            <td>{{ item.quantity }}</td>
+                                            <td>{{ "%.2f"|format(item.price_raw) }}</td>
+                                            <td>{{ t('shopping_unit_' + item.unit, default=item.unit.title()) }}</td>
+                                            <td>
+                                                <span class="badge bg-primary">{{ t('shopping_category_' + item.category, default=item.category.title()) }}</span>
+                                            </td>
+                                            <td>{{ item.store }}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm {{ 'btn-success' if item.status == 'bought' else 'btn-outline-secondary' }}" 
+                                                        onclick="toggleItemStatus('{{ item.id }}', '{{ item.status }}')" id="toggle-btn-{{ item.id }}">
+                                                    <i class="fas {{ 'fa-check' if item.status == 'bought' else 'fa-shopping-cart' }} me-1"></i>
+                                                    {{ t('shopping_status_' + item.status, default=('Bought' if item.status == 'bought' else 'To Buy')) }}
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="editItem('{{ item.id }}')">
+                                                        <i class="fas fa-edit"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteItem('{{ item.id }}', '{{ item.name | tojson | safe }}')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-shopping-cart fa-3x mb-3 text-muted"></i>
+                            <h5 class="text-muted">{{ t('shopping_no_items', default='No items in this list yet') }}</h5>
+                            <p class="text-muted">{{ t('shopping_add_items_description', default='Add items using the form above') }}</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Item Modal -->
+<div class="modal fade" id="editItemModal" tabindex="-1" aria-labelledby="editItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editItemModalLabel">{{ t('shopping_edit_item', default='Edit Item') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('shopping.edit_list', list_id=list_id) }}" id="editItemForm" class="validate-form">
+                {{ item_form.csrf_token }}
+                <input type="hidden" name="action" value="update_item">
+                <input type="hidden" name="item_id" id="edit_item_id">
+                
+                <div class="modal-body">
+                    <div id="form-error-alert" class="alert alert-danger d-none" role="alert"></div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ item_form.name.label(class="form-label") }}
+                            {{ item_form.name(class="form-control", id="edit_item_name", required=True) }}
+                            {% for error in item_form.name.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.quantity.label(class="form-label") }}
+                            {{ item_form.quantity(class="form-control", id="edit_item_quantity", min="1", max="1000", required=True) }}
+                            {% for error in item_form.quantity.errors %}
+                                <small class="text-danger">{{ error }}</smallસ
+
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.price.label(class="form-label") }}
+                            {{ item_form.price(class="form-control", type="number", id="edit_item_price", step="0.01", min="0", required=True) }}
+                            {% for error in item_form.price.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.unit.label(class="form-label") }}
+                            {{ item_form.unit(class="form-select", id="edit_item_unit", required=True) }}
+                            {% for error in item_form.unit.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.category.label(class="form-label") }}
+                            {{ item_form.category(class="form-select", id="edit_item_category") }}
+                            {% for error in item_form.category.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.store.label(class="form-label") }}
+                            {{ item_form.store(class="form-control", id="edit_item_store", required=True) }}
+                            {% for error in item_form.store.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ item_form.frequency.label(class="form-label") }}
+                            {{ item_form.frequency(class="form-control", id="edit_item_frequency", min="1", max="365", required=True) }}
+                            {% for error in item_form.frequency.errors %}
+                                <small class="text-danger">{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ item_form.status.label(class="form-label") }}
+                        {{ item_form.status(class="form-select", id="edit_item_status", required=True) }}
+                        {% for error in item_form.status.errors %}
+                            <small class="text-danger">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('general_cancel', default='Cancel') }}</button>
+                    <button type="submit" class="btn btn-primary">{{ t('shopping_update_item', default='Update Item') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Item Modal -->
+<div class="modal fade" id="deleteItemModal" tabindex="-1" aria-labelledby="deleteItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteItemModalLabel">{{ t('shopping_confirm_delete_item', default='Confirm Delete Item') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>{{ t('shopping_delete_item_confirmation', default='Are you sure you want to delete the item') }} "<span id="deleteItemName"></span>"?</p>
+                <p class="text-danger small">{{ t('shopping_delete_warning', default='This action cannot be undone.') }}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('general_cancel', default='Cancel') }}</button>
+                <form method="POST" action="{{ url_for('shopping.edit_list', list_id=list_id) }}" style="display: inline;">
+                    {{ item_form.csrf_token }}
+                    <input type="hidden" name="action" value="delete_item">
+                    <input type="hidden" name="item_id" id="delete_item_id">
+                    <button type="submit" class="btn btn-danger">{{ t('shopping_delete', default='Delete') }}</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form validation
+    const forms = document.querySelectorAll('.validate-form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function(event) {
+            const priceInput = form.querySelector('input[name="price"]');
+            const statusSelect = form.querySelector('select[name="status"]');
+            
+            // Clear previous validation states
+            form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+            const errorAlert = form.querySelector('#form-error-alert');
+            if (errorAlert) errorAlert.classList.add('d-none');
+
+            let valid = true;
+            let errors = [];
+
+            // Validate price
+            if (!priceInput.value || parseFloat(priceInput.value) < 0) {
+                priceInput.classList.add('is-invalid');
+                errors.push('Price is required and must be non-negative.');
+                valid = false;
+            }
+
+            // Validate status
+            if (!statusSelect.value) {
+                statusSelect.classList.add('is-invalid');
+                errors.push('Status is required.');
+                valid = false;
+            }
+
+            if (!valid) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (errorAlert) {
+                    errorAlert.classList.remove('d-none');
+                    errorAlert.textContent = errors.join(' ');
+                }
+            }
+            
+            form.classList.add('was-validated');
+        });
+    });
+});
+
+function toggleItemStatus(itemId, currentStatus) {
+    const button = document.getElementById(`toggle-btn-${itemId}`);
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> {{ t("shopping_updating", default="Updating...") }}';
+
+    fetch('/shopping/toggle_item_status', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({ item_id: itemId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        } else {
+            alert(data.error || '{{ t("shopping_status_error", default="Error updating item status") }}');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('{{ t("shopping_status_error", default="Error updating item status") }}: ' + error.message);
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function editItem(itemId) {
+    const items = {{ items | tojson | safe }};
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+        // Ensure valid status
+        const validStatuses = ['to_buy', 'bought'];
+        const status = validStatuses.includes(item.status) ? item.status : 'to_buy';
+
+        document.getElementById('edit_item_id').value = item.id;
+        document.getElementById('edit_item_name').value = item.name;
+        document.getElementById('edit_item_quantity').value = item.quantity;
+        document.getElementById('edit_item_price').value = item.price_raw.toFixed(2);
+        document.getElementById('edit_item_unit').value = item.unit;
+        document.getElementById('edit_item_category').value = item.category;
+        document.getElementById('edit_item_store').value = item.store;
+        document.getElementById('edit_item_frequency').value = item.frequency;
+        document.getElementById('edit_item_status').value = status;
+
+        // Reset validation states
+        const form = document.getElementById('editItemForm');
+        form.classList.remove('was-validated');
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        const errorAlert = form.querySelector('#form-error-alert');
+        if (errorAlert) errorAlert.classList.add('d-none');
+
+        const modal = new bootstrap.Modal(document.getElementById('editItemModal'));
+        modal.show();
+    }
+}
+
+function deleteItem(itemId, itemName) {
+    document.getElementById('deleteItemName').textContent = JSON.parse(itemName);
+    document.getElementById('delete_item_id').value = itemId;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteItemModal'));
+    modal.show();
+}
+</script>
+{% endblock %}
