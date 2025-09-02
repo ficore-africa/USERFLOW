@@ -260,3 +260,27 @@ df-messenger {
     color: #2563eb;
     text-decoration: underline;
 }
+.language-btn {
+  background: transparent;
+  border: 1px solid #1E3A8A;
+  color: #1E3A8A;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 0.4rem;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+
+.language-btn.active {
+  background: #B88A44;
+  border-color: #B88A44;
+  color: #000;
+}
+
+.language-btn:hover {
+  background: rgba(255, 215, 0, 0.1);
+  border-color: #1E3A8A;
+  color: #1E3A8A;
+}
+
